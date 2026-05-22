@@ -6,6 +6,7 @@ import { BOQResponse, BOQElement } from './types';
 import { DrawingViewer } from './components/DrawingViewer';
 import { BOQTable } from './components/BOQTable';
 import { RatesManager } from './components/RatesManager';
+import { extractBOQ } from './services/geminiService';
 import { 
   FileText, Map, HelpCircle, HardHat, 
   Search, Scroll, Compass, Sparkles, Languages, Settings,
@@ -55,15 +56,12 @@ export default function App() {
     // Standard initialization with local rate calculations
     const fetchDefaultData = async () => {
       try {
-        const response = await fetch("/api/extract-bom", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            presetId: activePresetId,
-            regionId: activeRegionId
-          })
-        });
-        const res = await response.json();
+        const res = await extractBOQ(
+          undefined,
+          undefined,
+          activeRegionId,
+          activePresetId
+        );
         if (res.success && res.data) {
           setExtractedData(res.data);
           setIsSimulated(res.isSimulated !== false);
@@ -167,19 +165,13 @@ export default function App() {
     }, tickMs);
 
     try {
-      const response = await fetch("/api/extract-bom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: uploadedBase64 || undefined,
-          mimeType: uploadedMimeType || undefined,
-          regionId: activeRegionId,
-          presetId: uploadedBase64 ? undefined : activePresetId,
-          customPromptInput: customInstruction || undefined
-        })
-      });
-
-      const result = await response.json();
+      const result = await extractBOQ(
+        uploadedBase64 || undefined,
+        uploadedMimeType || undefined,
+        activeRegionId,
+        uploadedBase64 ? undefined : activePresetId,
+        customInstruction || undefined
+      );
       
       setTimeout(() => {
         if (result.success && result.data) {

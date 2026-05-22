@@ -25,7 +25,7 @@ async function startServer() {
   });
 
   // API Route: Core AI model extraction interface
-  app.post("/api/extract-bom", async (req, res) => {
+  app.post(["/api/extract", "/api/extract-bom"], async (req, res) => {
     try {
       const { imageBase64, mimeType, regionId, presetId, customPromptInput } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
