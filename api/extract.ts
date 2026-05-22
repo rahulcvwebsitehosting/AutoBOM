@@ -66,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     const textPart = {
-      text: "Analyze this construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary."
+      text: "Analyze THIS construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary."
     };
 
     // 3. INITIALIZE THE CLIENT WITH MODERN SDK (per SDK Guidelines)

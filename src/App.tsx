@@ -53,6 +53,10 @@ export default function App() {
 
   // Pre-load default Erode Cattle Shed data so the workspace is immediately alive and breathtaking!
   useEffect(() => {
+    if (uploadedBase64) {
+      // ONLY show the pre-loaded cattle shed data when NO file has been uploaded
+      return;
+    }
     // Standard initialization with local rate calculations
     const fetchDefaultData = async () => {
       try {
@@ -73,7 +77,7 @@ export default function App() {
     };
     
     fetchDefaultData();
-  }, [activePresetId, activeRegionId]);
+  }, [activePresetId, activeRegionId, uploadedBase64]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -103,12 +107,11 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = () => {
-      setUploadedBase64(reader.result as string);
+      const base64Data = reader.result as string;
+      setUploadedBase64(base64Data);
       console.log("File loaded successfully into memory stream.");
-      // Trigger the 6s AI calculation animation automatically!
-      setTimeout(() => {
-        runBOMCraftingAnimation();
-      }, 50);
+      // Trigger the AI calculation automatically with the actual fresh base64Data!
+      runBOMCraftingAnimation(base64Data, file.type);
     };
     reader.onerror = (err) => console.error("File loading error:", err);
     reader.readAsDataURL(file);
@@ -133,66 +136,64 @@ export default function App() {
   };
 
   // Run Real/Simulated AI Analysis through full stack Express Router
-  const runBOMCraftingAnimation = async () => {
+  const runBOMCraftingAnimation = async (base64Override?: string, mimeTypeOverride?: string) => {
     setIsLoading(true);
     setCraftProgress(0);
     setCraftStageText("ANALYZING DRAWING LAYOUT...");
+    setUploadError(null);
 
-    let elapsed = 0;
-    const tickMs = 600; // 600ms per segment (10 segments total = 6000ms duration)
-
+    let progressVal = 0;
+    const intervalMs = 600;
     const progressInterval = setInterval(() => {
-      elapsed += tickMs;
-      const nextProgress = Math.min(10, Math.floor(elapsed / tickMs));
+      progressVal += 1;
+      const nextProgress = Math.min(9, progressVal);
       setCraftProgress(nextProgress);
 
-      const msElapsed = elapsed;
-      if (msElapsed < 1500) {
+      if (nextProgress < 3) {
         setCraftStageText("ANALYZING DRAWING LAYOUT...");
-      } else if (msElapsed < 3000) {
+      } else if (nextProgress < 5) {
         setCraftStageText("EXTRACTING DIMENSIONS & ANNOTATIONS...");
-      } else if (msElapsed < 4500) {
+      } else if (nextProgress < 7) {
         setCraftStageText("CALCULATING MATERIAL QUANTITIES...");
-      } else if (msElapsed < 5500) {
-        setCraftStageText("VERIFYING IS CODE COMPLIANCE...");
       } else {
-        setCraftStageText("GENERATING FINAL BOQ...");
+        setCraftStageText("VERIFYING IS CODE COMPLIANCE...");
       }
-
-      if (nextProgress >= 10) {
-        clearInterval(progressInterval);
-      }
-    }, tickMs);
+    }, intervalMs);
 
     try {
+      const base64ToSend = base64Override || uploadedBase64;
+      const mimeTypeToSend = mimeTypeOverride || uploadedMimeType;
+
+      if (!base64ToSend) {
+        throw new Error("No uploaded drawing or base64 data available");
+      }
+
       const result = await extractBOQ(
-        uploadedBase64 || undefined,
-        uploadedMimeType || undefined,
+        base64ToSend,
+        mimeTypeToSend || 'image/png',
         activeRegionId,
-        uploadedBase64 ? undefined : activePresetId,
+        undefined, // NO presetId since file is uploaded
         customInstruction || undefined
       );
       
-      setTimeout(() => {
-        if (result.success && result.data) {
-          setExtractedData(result.data);
-          setIsSimulated(result.isSimulated !== false);
-          setActiveTab('boq');
-        } else {
-          // Fall back gracefully to preset if API has an error
-          setExtractedData(activePreset.sampleData);
-          setActiveTab('boq');
-        }
-        setIsLoading(false);
-      }, 6000);
+      clearInterval(progressInterval);
+      setCraftProgress(10);
+      setCraftStageText("GENERATING FINAL BOQ...");
+
+      if (result.success && result.data) {
+        setExtractedData(result.data);
+        setIsSimulated(result.isSimulated !== false);
+        setActiveTab('boq');
+      } else {
+        throw new Error(result.error || "Drawing extraction failed");
+      }
 
     } catch (err: any) {
-      setTimeout(() => {
-        // Fall back gracefully to preset if fetch fails
-        setExtractedData(activePreset.sampleData);
-        setActiveTab('boq');
-        setIsLoading(false);
-      }, 6000);
+      clearInterval(progressInterval);
+      console.error("Custom drawing extraction failed:", err);
+      setUploadError(err.message || "Failed to analyze drawing. Please ensure you have configured a valid GEMINI_API_KEY in Settings > Secrets.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
