@@ -9,9 +9,12 @@ interface BOQTableProps {
   regionId: string;
   onUpdateElements: (updated: BOQElement[]) => void;
   contractorMarginFraction: number; // 0.05
+  projectName: string;
+  currency: 'INR' | 'USD';
 }
 
-export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMarginFraction }: BOQTableProps) {
+export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMarginFraction, projectName, currency }: BOQTableProps) {
+  const symbol = currency === 'USD' ? '$' : '₹';
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingRate, setEditingRate] = useState<number>(0);
   const [editingQty, setEditingQty] = useState<number>(0);
@@ -43,18 +46,16 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
   const saveEdit = (id: string) => {
     const updated = elements.map(el => {
       if (el.element_id === id) {
-        // Calculate updated cost with the same formula
-        const dryCost = editingQty * editingRate * (el.dimensions?.thickness_mm ? 1.05 : 1.1) ; // approximate or direct dry multiplication with wastage
-        // Let's use clean standard multiplication with wastage factor and margin: Qty * Rate * WasteFactor * (1 + margin)
-        const wasteFactor = el.category === 'concrete' ? 1.54 : el.category === 'steel' ? 1.05 : el.category === 'masonry' ? 1.10 : el.category === 'finish' ? 1.15 : 1.1;
-        const totalCost = Math.round(editingQty * editingRate * wasteFactor * (1 + contractorMarginFraction));
+        const totalCost = currency === 'USD' 
+          ? Math.round((editingQty * editingRate) * 100) / 100 
+          : Math.round(editingQty * editingRate);
 
         return {
           ...el,
           quantity: { ...el.quantity, value: editingQty },
           unit_rate: editingRate,
           total_cost: totalCost,
-          calculation_notes: `${editingQty} * ${editingRate} * ${wasteFactor} (Wastage)`
+          calculation_notes: `${editingQty} * ${editingRate}`
         };
       }
       return el;
@@ -76,7 +77,9 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
 
   const submitAddForm = (e: React.FormEvent) => {
     e.preventDefault();
-    const totalCost = Math.round(newQty * newRate * newWaste * (1 + contractorMarginFraction));
+    const totalCost = currency === 'USD' 
+      ? Math.round((newQty * newRate) * 100) / 100 
+      : Math.round(newQty * newRate);
     const newItem: BOQElement = {
       element_id: newId,
       category: newCat,
@@ -92,7 +95,7 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
         value: newQty,
         unit: newUnit
       },
-      calculation_notes: newNotes || `${newQty} ${newUnit} at ₹${newRate}`,
+      calculation_notes: newNotes || `${newQty} ${newUnit} at ${currency === 'USD' ? '$' : '₹'}${newRate}`,
       is_code_reference: newCodeRef,
       confidence: 1.0,
       verification_required: false,
@@ -140,35 +143,37 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
 
   // Safe client CSV Exporter
   const handleCSVExport = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Element ID,Category,Material Type,Description,Location,Quantity,Unit,Base Rate (INR),Wastage Factor,Total Cost (INR),IS Compliance Code,Verification Required?\r\n";
+    let csvContent = "\uFEFFItem,Description,Qty,Unit,Rate,Amount,Confidence\r\n";
 
     elements.forEach(el => {
-      const wasteFactor = el.category === 'concrete' ? 1.54 : el.category === 'steel' ? 1.05 : el.category === 'masonry' ? 1.10 : el.category === 'finish' ? 1.15 : 1.1;
+      const confidencePercent = Math.round(el.confidence * 100) + "%";
       const row = [
-        el.element_id,
-        el.category,
-        el.type,
+        `"${el.element_id.replace(/"/g, '""')}"`,
         `"${el.description.replace(/"/g, '""')}"`,
-        `"${el.location.replace(/"/g, '""')}"`,
         el.quantity.value,
-        el.quantity.unit,
+        `"${el.quantity.unit.replace(/"/g, '""')}"`,
         el.unit_rate || 0,
-        wasteFactor,
         el.total_cost || 0,
-        `"${el.is_code_reference.replace(/"/g, '""')}"`,
-        el.verification_required ? "YES" : "NO"
+        `"${confidencePercent}"`
       ].join(",");
       csvContent += row + "\r\n";
     });
 
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `AUTOBOM_BOQ_REPORT_${regionId.toUpperCase()}.csv`);
+    
+    // Replace non-alphanumeric chars with underscore for standard filesystem names
+    const cleanProjectName = projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "Project";
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileName = `AutoBOM_${cleanProjectName}_${dateStr}.csv`;
+
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -470,7 +475,7 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
                     <td className="p-3 border-r border-[#3E2723] text-right font-mono font-bold text-[#388E3C]">
                       {isEditing ? (
                         <div className="flex items-center justify-end">
-                          <span className="mr-0.5 text-xs text-[#616161]">₹</span>
+                          <span className="mr-0.5 text-xs text-[#616161]">{symbol}</span>
                           <input 
                             type="number" 
                             value={editingRate}
@@ -480,7 +485,7 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
                         </div>
                       ) : (
                         <span>
-                          ₹{el.unit_rate?.toLocaleString() || 0}
+                          {symbol}{el.unit_rate?.toLocaleString() || 0}
                         </span>
                       )}
                     </td>
@@ -492,7 +497,7 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
 
                     {/* Total cost calculated */}
                     <td className="p-3 border-r border-[#3E2723] text-right font-mono font-bold">
-                      ₹{el.total_cost?.toLocaleString() || 0}
+                      {symbol}{el.total_cost?.toLocaleString() || 0}
                     </td>
 
                     {/* IS Code Compliance & Confidence */}

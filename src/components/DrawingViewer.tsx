@@ -24,6 +24,8 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [hoverCoords, setHoverCoords] = useState({ x: 0.00, y: 0.00 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -31,6 +33,15 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const xVal = Math.max(0, Math.min(15, (mouseX / rect.width) * 15));
+      const yVal = Math.max(0, Math.min(8, (mouseY / rect.height) * 8));
+      setHoverCoords({ x: xVal, y: yVal });
+    }
+
     if (!isDragging) return;
     setPan({
       x: e.clientX - dragStart.current.x,
@@ -291,6 +302,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
 
       {/* Main Vector Slate Canvas with dynamic zoom scale and padding */}
       <div 
+        ref={containerRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -299,8 +311,8 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         style={{ backgroundImage: 'repeating-linear-gradient(rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px), repeating-linear-gradient(90deg, rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px)' }}
       >
         {/* SCALE RATIO DESTRUCT BEACON */}
-        <div className="absolute top-2 left-2 block text-2xs font-mono text-[#616161] bg-[#E8E4C9] p-1 border border-[#3E2723] select-none">
-          X: {pan.x} | Y: {pan.y}
+        <div className="absolute top-2 left-2 block text-2xs font-mono text-[#212121] bg-[#F9A825] p-1 border-2 border-[#3E2723] select-none font-bold">
+          X: {hoverCoords.x.toFixed(2)} M | Y: {hoverCoords.y.toFixed(2)} M
         </div>
         <div className="absolute top-2 right-2 hidden sm:block text-2xs font-mono text-[#388E3C] bg-[#E8E4C9] p-1 border border-[#3E2723] select-none font-bold">
           ⚡ SYSTEM SCANNER LIVE [94%]
