@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Configuration
@@ -47,6 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY || "";
+    if (!apiKey) {
+      return res.status(500).json({ success: false, error: "GEMINI_API_KEY environment variable is not defined" });
+    }
 
     // Clean base64 encoding scheme headers
     let cleanedBase64 = imageBase64;
@@ -62,84 +65,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     };
 
-    // 3. INITIALIZE THE CLIENT EXACTLY LIKE THIS
-    let genAI;
-    let model;
-    let modelNameUsed = "gemini-1.5-pro-latest";
-    try {
-      genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-      model = genAI.getGenerativeModel({ model: modelNameUsed });
+    const textPart = {
+      text: "Analyze this construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary."
+    };
 
-      // 1. Logs requested
-      console.log("Gemini initialized");
-      console.log(`Model name used: ${modelNameUsed}`);
+    // 3. INITIALIZE THE CLIENT WITH MODERN SDK (per SDK Guidelines)
+    let ai;
+    try {
+      ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      console.log("Gemini client initialized with modern @google/genai SDK");
     } catch (error: any) {
       console.log("Gemini init failed: " + error.message);
       return res.status(500).json({ success: false, error: "Gemini init failed: " + error.message });
     }
 
-    // 5. Wrap model.generateContent call
-    let result;
-    try {
-      // 7. USE THIS EXACT PROMPT TEXT to send to Gemini
-      result = await model.generateContent({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              imagePart,
-              { text: "Analyze this construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary." }
-            ]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-        },
-      });
-    } catch (error: any) {
-      console.log(`Primary model (${modelNameUsed}) generation failed: ${error.message}`);
-      
-      // If the error indicates that the model is not found, not supported, or restricted for this API key, gracefully fallback to gemini-1.5-flash
-      const isModelNotFoundError = 
-        error.message.includes("not found") || 
-        error.message.includes("not supported") || 
-        error.message.includes("supported methods") || 
-        error.message.includes("available models") ||
-        error.message.includes("404");
+    const candidateModels = [
+      "gemini-3.5-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-2.5-flash-image",
+      "gemini-1.5-flash",
+      "gemini-1.5-pro"
+    ];
 
-      if (isModelNotFoundError) {
-        modelNameUsed = "gemini-1.5-flash";
-        console.log(`Attempting fallback to model: ${modelNameUsed}`);
-        try {
-          model = genAI.getGenerativeModel({ model: modelNameUsed });
-          result = await model.generateContent({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  imagePart,
-                  { text: "Analyze this construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary." }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-            },
-          });
-          console.log(`Fallback generation with ${modelNameUsed} succeeded!`);
-        } catch (fallbackError: any) {
-          console.log(`Fallback model ${modelNameUsed} generation failed as well: ${fallbackError.message}`);
-          return res.status(500).json({ success: false, error: "Gemini API error: " + error.message + " (and fallback failed: " + fallbackError.message + ")" });
+    let result = null;
+    let modelNameUsed = "";
+    let lastError: any = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        console.log(`Attempting content generation with model: ${modelName}`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: { parts: [imagePart, textPart] },
+          config: {
+            responseMimeType: "application/json",
+          },
+        });
+        
+        result = response;
+        modelNameUsed = modelName;
+        console.log(`Content generation succeeded with model: ${modelName}`);
+        break;
+      } catch (error: any) {
+        lastError = error;
+        console.log(`Model ${modelName} failed: ${error.message}`);
+        
+        // Check if the error indicates model not found, not supported, or restricted key access
+        const isModelErrors = 
+          error.message.includes("not found") || 
+          error.message.includes("not supported") || 
+          error.message.includes("supported methods") || 
+          error.message.includes("available models") ||
+          error.message.includes("404") ||
+          error.message.includes("403");
+
+        if (!isModelErrors) {
+          // If it's a completely different kind of error (like bad base64 or quota ex), propagate immediately
+          return res.status(500).json({ success: false, error: `Gemini API error: ${error.message}` });
         }
-      } else {
-        return res.status(500).json({ success: false, error: "Gemini API error: " + error.message });
+        // Otherwise, continue trying next candidate model
       }
     }
 
+    if (!result) {
+      return res.status(500).json({
+        success: false,
+        error: `Gemini API error: All candidate models failed to generate content. Last error: ${lastError?.message || "Unknown error"}. Clean developer API keys from Google AI Studio are required.`
+      });
+    }
+
+    // 5. Wrap response text extraction (per modern SDK guidelines, response.text is a getter, not a function)
     let rawResult = "";
     try {
-      const response = await result.response;
-      rawResult = response.text() ? response.text().trim() : "{}";
+      rawResult = result.text ? result.text.trim() : "{}";
     } catch (error: any) {
       console.log("Gemini API response reading error: " + error.message);
       return res.status(500).json({ success: false, error: "Gemini API error: " + error.message });
