@@ -1,0 +1,6 @@
+{
+  "name": "AutoBOM",
+  "description": "AI-Powered Bill of Materials (BOM) generator for civil and agricultural drawings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
