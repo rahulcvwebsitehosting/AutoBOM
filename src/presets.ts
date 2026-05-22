@@ -507,5 +507,175 @@ export const PRESET_DRAWINGS: PresetDrawing[] = [
         overall_confidence: 0.95
       }
     }
+  },
+  {
+    id: 'paddy_storage_godown_new',
+    title: 'AGRICULTURAL - Paddy Storage Godown & Silo Base Pad',
+    category: 'agricultural',
+    location: 'Gobichettipalayam Plains, Erode',
+    description: 'RCC base pad for paddy storage godown with silo foundation points',
+    scale: '1:50',
+    gridSize: '12m x 10m',
+    imageThumbnail: 'grain_silo',
+    sampleData: {
+      project_info: {
+        drawing_title: "Paddy Storage Godown & Silo Base Pad Layout",
+        drawing_number: "PSG-ERD-2026-92",
+        scale: "1:50",
+        sheet_number: "SH-1 of 1",
+        date: "2026-05-22",
+        confidence: 0.98
+      },
+      elements: [
+        {
+          element_id: "EL-PAD-01",
+          category: "concrete",
+          type: "M25",
+          description: "RCC Base Pad M25 (12m x 10m x 0.15m base concrete pad)",
+          location: "Silo ground pad level",
+          dimensions: { length_m: 12, width_m: 10, height_m: 0.15 },
+          quantity: { value: 18, unit: "m3" },
+          calculation_notes: "12m × 10m × 0.15m = 18 m³",
+          is_code_reference: "IS 456-2000 - Concrete Designs",
+          confidence: 0.98,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-PCC-01",
+          category: "concrete",
+          type: "M10",
+          description: "PCC Bed (levelling plain concrete bed 100mm thickness)",
+          location: "Silo base sub-bed",
+          dimensions: { length_m: 12, width_m: 10, height_m: 0.10 },
+          quantity: { value: 12, unit: "m3" },
+          calculation_notes: "12m × 10m × 0.10m = 12 m³",
+          is_code_reference: "IS 456-2000 - Lean Subgrade PCC",
+          confidence: 0.95,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-PLINTH-01",
+          category: "masonry",
+          type: "brick_class_1",
+          description: "Brick Plinth (support brick retention rim with perimeter 44m)",
+          location: "Plinth boundary perimeter",
+          dimensions: { length_m: 44, width_m: 0.23, height_m: 0.6 },
+          quantity: { value: 6.07, unit: "m3" },
+          calculation_notes: "44m perimeter × 0.6m height × 0.23m thickness = 6.072 m³ (net plinth masonry volume)",
+          is_code_reference: "IS 1077-1992 - Clay Brick Masonry",
+          confidence: 0.92,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-EXC-01",
+          category: "excavation",
+          type: "soft_soil",
+          description: "Excavation (leveling foundation sandbox trenches)",
+          location: "Foundation excavation bed",
+          dimensions: { length_m: 12, width_m: 10, height_m: 0.5 },
+          quantity: { value: 60, unit: "m3" },
+          calculation_notes: "12m × 10m × 0.5m = 60 m³",
+          is_code_reference: "IS 1200 Part 1 - Soil Earthworks",
+          confidence: 0.98,
+          verification_required: false,
+          warnings: []
+        }
+      ],
+      summary: {
+        total_elements: 4,
+        elements_by_category: { "concrete": 2, "masonry": 1, "excavation": 1 },
+        high_confidence_count: 4,
+        review_needed_count: 0,
+        overall_confidence: 0.96
+      }
+    }
+  },
+  {
+    id: 'dry_granite_post_fencing_new',
+    title: 'AGRICULTURAL - Dry Granite Post Boundary Fencing',
+    category: 'agricultural',
+    location: 'Salem Outer Foothills, Salem',
+    description: 'Farm boundary with granite posts and chain-link fencing',
+    scale: '1:100',
+    gridSize: '30m x 20m',
+    imageThumbnail: 'fence_layout',
+    sampleData: {
+      project_info: {
+        drawing_title: "Dry Granite Post Boundary Fencing Perimeter",
+        drawing_number: "BFP-SLM-2026-10",
+        scale: "1:100",
+        sheet_number: "SH-1 of 1",
+        date: "2026-05-22",
+        confidence: 0.97
+      },
+      elements: [
+        {
+          element_id: "EL-POST-01",
+          category: "other",
+          type: "granite_post",
+          description: "Granite Posts (150×150mm)",
+          location: "Perimeter boundaries, spaced 5m apart",
+          dimensions: { length_m: null, width_m: null, height_m: null },
+          quantity: { value: 20, unit: "nos" },
+          calculation_notes: "100m total boundary line divided by 5m spacing = 20 post points",
+          is_code_reference: "IS Boundary Post Standards",
+          confidence: 0.98,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-MESH-01",
+          category: "other",
+          type: "chain_link_mesh",
+          description: "Chain Link Fencing",
+          location: "Post-to-post spans",
+          dimensions: { length_m: 100, width_m: null, height_m: null },
+          quantity: { value: 100, unit: "m" },
+          calculation_notes: "Total fence perimeter loop: (30m + 20m) × 2 = 100m span",
+          is_code_reference: "IS 2721 - Galvanized Fencing Fabric",
+          confidence: 0.97,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-FOOT-01",
+          category: "concrete",
+          type: "M20",
+          description: "Concrete Footing (pour concrete embedding anchor pits)",
+          location: "Foundation anchoring points",
+          dimensions: { length_m: 0.4, width_m: 0.4, height_m: 0.6 },
+          quantity: { value: 1.92, unit: "m3" },
+          calculation_notes: "20 post foundation pits × 0.4m × 0.4m × 0.6m height = 1.92 m³",
+          is_code_reference: "IS 456-2000 - Plain concrete anchors",
+          confidence: 0.95,
+          verification_required: false,
+          warnings: []
+        },
+        {
+          element_id: "EL-WIRE-01",
+          category: "other",
+          type: "barbed_wire_strand",
+          description: "Barbed Wire (3 strands)",
+          location: "Overhead security wire line run",
+          dimensions: { length_m: 100, width_m: null, height_m: null },
+          quantity: { value: 100, unit: "m" },
+          calculation_notes: "100m length boundary run spanning security barbed strands",
+          is_code_reference: "IS 278 - High Tensile Wire Lines",
+          confidence: 0.96,
+          verification_required: false,
+          warnings: []
+        }
+      ],
+      summary: {
+        total_elements: 4,
+        elements_by_category: { "other": 3, "concrete": 1 },
+        high_confidence_count: 4,
+        review_needed_count: 0,
+        overall_confidence: 0.96
+      }
+    }
   }
 ];

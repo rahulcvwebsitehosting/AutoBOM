@@ -227,6 +227,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         );
 
       case 'grain_silo_gobi':
+      case 'paddy_storage_godown_new':
         return (
           <svg className="w-full h-full text-[#3E2723]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
             {activeLayers.grid && (
@@ -244,6 +245,37 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
               <g stroke="none" fill="#212121" fontSize="11" fontFamily="VT323" fontWeight="bold">
                 <text x="130" y="30" fill="#3D2723">PADDY STORAGE GODOWN — DIAL TOWER</text>
                 <text x="200" y="155" fill="#212121">BASE DIA = 8.0M</text>
+              </g>
+            )}
+          </svg>
+        );
+
+      case 'fencing_salem':
+      case 'dry_granite_post_fencing_new':
+        return (
+          <svg className="w-full h-full text-[#388E3C]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
+            {activeLayers.grid && (
+              <g strokeDasharray="3 3" stroke="#9E9E9E" strokeWidth="1" opacity="0.4">
+                <rect x="50" y="50" width="400" height="200" />
+              </g>
+            )}
+            {activeLayers.concrete && (
+              <g strokeWidth="3" stroke="#5D4037">
+                {/* Boundary Line */}
+                <rect x="70" y="70" width="360" height="160" fill="none" strokeDasharray="10 5" stroke="#3E2723" />
+                {/* Fence Posts */}
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <rect key={'top-' + i} x={70 + i * 51} y="63" width="14" height="14" fill="#9E9E9E" stroke="#3E2723" />
+                ))}
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <rect key={'bot-' + i} x={70 + i * 51} y="223" width="14" height="14" fill="#9E9E9E" stroke="#3E2723" />
+                ))}
+              </g>
+            )}
+            {activeLayers.notes && (
+              <g stroke="none" fill="#212121" fontSize="11" fontFamily="VT323" fontWeight="bold">
+                <text x="130" y="40" fill="#3D2723">boundary fencing layout — 30M x 20M</text>
+                <text x="160" y="150" fill="#212121">GRANITE POSTS SPACING: 5M C/C</text>
               </g>
             )}
           </svg>

@@ -332,6 +332,22 @@ export default function App() {
         else if (el.element_id === 'EL-010') { calculatedTotal = 65137; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
       }
 
+      // Preloaded override for Paddy Storage Godown & Silo Base Pad
+      if (activePresetId === 'paddy_storage_godown_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
+        if (el.element_id === 'EL-PAD-01') { calculatedTotal = 93600; baseRate = 5200; }
+        else if (el.element_id === 'EL-PCC-01') { calculatedTotal = 38400; baseRate = 3200; }
+        else if (el.element_id === 'EL-PLINTH-01') { calculatedTotal = 5160; baseRate = 850; }
+        else if (el.element_id === 'EL-EXC-01') { calculatedTotal = 10800; baseRate = 180; }
+      }
+
+      // Preloaded override for Dry Granite Post Boundary Fencing
+      if (activePresetId === 'dry_granite_post_fencing_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
+        if (el.element_id === 'EL-POST-01') { calculatedTotal = 17000; baseRate = 850; }
+        else if (el.element_id === 'EL-MESH-01') { calculatedTotal = 12000; baseRate = 120; }
+        else if (el.element_id === 'EL-FOOT-01') { calculatedTotal = 8640; baseRate = 4500; }
+        else if (el.element_id === 'EL-WIRE-01') { calculatedTotal = 4500; baseRate = 45; }
+      }
+
       return {
         ...el,
         unit_rate: baseRate,

@@ -66,7 +66,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     const textPart = {
-      text: "Analyze THIS construction drawing and extract all visible dimensions and structural elements.\n\nCRITICAL PROCESS REQUIREMENTS:\n1. Describe the actual structural element found in the drawing. Do NOT use generic placeholders or \"Test slab\" or assume it is a cattle shed unless explicitly indicated.\n2. FORCE EXACT CALCULATIONS: Calculate exact quantities using the dimension lines shown in the drawing. Do not round to convenient numbers. Show your math in card field \"calculation_notes\".\n3. REQUIRE DIMENSIONS IN OUTPUT: Every element must include \"extracted_length_m\", \"extracted_width_m\", and \"extracted_height_m\" fields so we can verify the math. If a dimension is not shown, use null.\n4. PREVENT HALLUCINATION: If you cannot clearly identify an element, omit it. Do not invent elements that are not explicitly shown.\n5. If there are multiple items with identical descriptions and quantities, keep only one or merge them.\n\nReturn ONLY a JSON object with this structure:\n{\n  \"project_info\": {\n    \"drawing_title\": \"string\",\n    \"drawing_number\": \"string\",\n    \"scale\": \"string\",\n    \"sheet_number\": \"string\",\n    \"date\": \"string\",\n    \"confidence\": number\n  },\n  \"elements\": [\n    {\n      \"element_id\": \"string\",\n      \"category\": \"concrete\" | \"steel\" | \"masonry\" | \"wood\" | \"finish\" | \"excavation\" | \"plumbing\" | \"electrical\" | \"other\",\n      \"type\": \"string\",\n      \"description\": \"Describe the actual structural element found in the drawing.\",\n      \"location\": \"string\",\n      \"extracted_length_m\": number or null,\n      \"extracted_width_m\": number or null,\n      \"extracted_height_m\": number or null,\n      \"quantity\": {\n        \"value\": number,\n        \"unit\": \"m3\" | \"m2\" | \"m\" | \"kg\" | \"nos\" | \"lumpsum\"\n      },\n      \"calculation_notes\": \"Detailed mathematical equation / explanation\",\n      \"is_code_reference\": \"string\",\n      \"confidence\": number,\n      \"verification_required\": boolean,\n      \"warnings\": [\"string\"]\n    }\n  ],\n  \"summary\": {\n    \"total_elements\": number,\n    \"overall_confidence\": number\n  }\n}"
+      text: `Analyze THIS construction drawing and extract all visible dimensions and structural elements.
+
+CRITICAL PROCESS REQUIREMENTS:
+1. Describe the actual structural element found in the drawing. Do NOT use generic placeholders or "Test slab" or assume it is a cattle shed unless explicitly indicated.
+2. FORCE EXACT CALCULATIONS: Calculate exact quantities using the dimension lines shown in the drawing. Do not round to convenient numbers. Show all your math step-by-step in the field "calculation_notes".
+3. WALLS/MASONRY QUANTITY FORMULA & DEDUPING CALCULATIONS:
+   - Walls/masonry items MUST be calculated as VOLUME in m³ (cubic meters), NEVER as length in meters.
+   - The mathematical formula for Wall Volume is: Wall Volume = (Perimeter in meters) × (Wall Height in meters) × (Wall Thickness in meters)
+   - You MUST subtract/deduct door and window openings from the total wall volume to yield the net wall volume.
+   - Example (for an 8m × 5m building, 3m height, 230mm thick walls):
+     - Perimeter = 8 + 5 + 8 + 5 = 26m
+     - Total/Base Wall Volume = 26m × 3m × 0.23m = 17.94 m³
+     - Deduct Door D-1: 1.2m × 2.1m × 0.23m = 0.58 m³ deduction
+     - Deduct Window W-1: 1.5m × 1.2m × 0.23m = 0.41 m³ deduction
+     - Net Wall Volume = Total Wall Volume - Door Deductions - Window Deductions = 17.94 - 0.58 - 0.41 = 16.95 m³
+     - Always document this exact math in the element's "calculation_notes" so we can audit the results.
+4. REQUIRE DIMENSIONS IN OUTPUT: Every element must include "extracted_length_m", "extracted_width_m", and "extracted_height_m" fields so we can verify the math. If a dimension is not shown, use null.
+5. PREVENT HALLUCINATION: If you cannot clearly identify an element, omit it. Do not invent elements that are not explicitly shown.
+6. ENFORCE CORRECT CATEGORY QUANTITY UNITS:
+   - category "masonry" → quantity unit MUST be "m3" (volume)
+   - category "concrete" → quantity unit MUST be "m3" (volume)
+   - category "steel" → quantity unit MUST be "kg" (weight)
+   - category "finish" → quantity unit MUST be "m2" (area)
+   - category "excavation" → quantity unit MUST be "m3" (volume)
+   - category "door" or "window" or other countable components → quantity unit MUST be "nos" (number)
+
+Return ONLY a JSON object with this exact structure:
+{
+  "project_info": {
+    "drawing_title": "string",
+    "drawing_number": "string",
+    "scale": "string",
+    "sheet_number": "string",
+    "date": "string",
+    "confidence": number
+  },
+  "elements": [
+    {
+      "element_id": "string",
+      "category": "concrete" | "steel" | "masonry" | "wood" | "finish" | "excavation" | "plumbing" | "electrical" | "other",
+      "type": "string",
+      "description": "Specific explanation of this actual element found in the drawing (DO NOT use placeholders like 'Test slab')",
+      "location": "string",
+      "extracted_length_m": number or null,
+      "extracted_width_m": number or null,
+      "extracted_height_m": number or null,
+      "quantity": {
+        "value": number,
+        "unit": "m3" | "m2" | "m" | "kg" | "nos" | "lumpsum"
+      },
+      "calculation_notes": "Detailed mathematical step-by-step equation / explanation (how you arrived at the quantity value, showing all dimensions and deductions)",
+      "is_code_reference": "string",
+      "confidence": number,
+      "verification_required": boolean,
+      "warnings": ["string"]
+    }
+  ],
+  "summary": {
+    "total_elements": number,
+    "overall_confidence": number
+  }
+}`
     };
 
     // 3. INITIALIZE THE CLIENT WITH MODERN SDK (per SDK Guidelines)
@@ -89,9 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const candidateModels = [
       "gemini-3.5-flash",
       "gemini-3.1-pro-preview",
-      "gemini-2.5-flash-image",
-      "gemini-1.5-flash",
-      "gemini-1.5-pro"
+      "gemini-2.5-flash-image"
     ];
 
     let result = null;
@@ -193,13 +252,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           confidence: typeof parsedData.project_info?.confidence === "number" ? parsedData.project_info.confidence : 0.95
         },
         elements: dedupedElements.length > 0 ? dedupedElements.map((el: any, index: number) => {
+          let cat = (el.category || "concrete").trim().toLowerCase();
+          const typeLower = (el.type || "").trim().toLowerCase();
+          const descLower = (el.description || "").trim().toLowerCase();
+
+          // Standardize category to allowed categories in types.ts (eligible: concrete | steel | masonry | wood | finish | excavation | plumbing | electrical | other)
+          const allowedCats = ["concrete", "steel", "masonry", "wood", "finish", "excavation", "plumbing", "electrical", "other"];
+          if (!allowedCats.includes(cat)) {
+            cat = "other";
+          }
+
           const l = el.extracted_length_m !== undefined ? el.extracted_length_m : (el.dimensions?.length_m || null);
           const w = el.extracted_width_m !== undefined ? el.extracted_width_m : (el.dimensions?.width_m || null);
           const h = el.extracted_height_m !== undefined ? el.extracted_height_m : (el.dimensions?.height_m || null);
 
+          // Force correct unit based on strict user guidelines
+          let finalUnit = (el.quantity?.unit || "m3").trim().toLowerCase();
+          if (cat === "masonry") {
+            finalUnit = "m3";
+          } else if (cat === "concrete") {
+            finalUnit = "m3";
+          } else if (cat === "steel") {
+            finalUnit = "kg";
+          } else if (cat === "finish") {
+            finalUnit = "m2";
+          } else if (cat === "excavation") {
+            finalUnit = "m3";
+          } else if (el.category === "door" || el.category === "window" || typeLower.includes("door") || typeLower.includes("window") || descLower.includes("door") || descLower.includes("window")) {
+            finalUnit = "nos";
+          }
+
+          // Normalize unit characters
+          if (finalUnit === "m³") finalUnit = "m3";
+          if (finalUnit === "m²") finalUnit = "m2";
+          const validUnits = ["m3", "m2", "m", "kg", "nos", "lumpsum"];
+          if (!validUnits.includes(finalUnit)) {
+            finalUnit = "m3";
+          }
+
           return {
             element_id: el.element_id || String(index + 1),
-            category: el.category || "concrete",
+            category: cat,
             type: el.type || "Structural Element",
             description: el.description || "Structural design element",
             location: el.location || "Foundation",
@@ -215,7 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             quantity: {
               value: typeof el.quantity?.value === "number" ? el.quantity.value : (typeof el.quantity === "number" ? el.quantity : 10),
-              unit: el.quantity?.unit || "m3"
+              unit: finalUnit
             },
             calculation_notes: el.calculation_notes || `Calculated dynamically: ${l || 1} x ${w || 1} x ${h || 1}`,
             is_code_reference: el.is_code_reference || "IS 456-2000",
