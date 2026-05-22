@@ -65,13 +65,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 3. INITIALIZE THE CLIENT EXACTLY LIKE THIS
     let genAI;
     let model;
+    let modelNameUsed = "gemini-1.5-pro-latest";
     try {
       genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-      model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+      model = genAI.getGenerativeModel({ model: modelNameUsed });
 
       // 1. Logs requested
       console.log("Gemini initialized");
-      console.log("Model name used: gemini-1.5-pro-latest");
+      console.log(`Model name used: ${modelNameUsed}`);
     } catch (error: any) {
       console.log("Gemini init failed: " + error.message);
       return res.status(500).json({ success: false, error: "Gemini init failed: " + error.message });
@@ -96,8 +97,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       });
     } catch (error: any) {
-      console.log("Gemini API error: " + error.message);
-      return res.status(500).json({ success: false, error: "Gemini API error: " + error.message });
+      console.log(`Primary model (${modelNameUsed}) generation failed: ${error.message}`);
+      
+      // If the error indicates that the model is not found, not supported, or restricted for this API key, gracefully fallback to gemini-1.5-flash
+      const isModelNotFoundError = 
+        error.message.includes("not found") || 
+        error.message.includes("not supported") || 
+        error.message.includes("supported methods") || 
+        error.message.includes("available models") ||
+        error.message.includes("404");
+
+      if (isModelNotFoundError) {
+        modelNameUsed = "gemini-1.5-flash";
+        console.log(`Attempting fallback to model: ${modelNameUsed}`);
+        try {
+          model = genAI.getGenerativeModel({ model: modelNameUsed });
+          result = await model.generateContent({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  imagePart,
+                  { text: "Analyze this construction drawing. Extract all visible dimensions and structural elements. Return ONLY a JSON object with fields: project_info, elements, summary." }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+            },
+          });
+          console.log(`Fallback generation with ${modelNameUsed} succeeded!`);
+        } catch (fallbackError: any) {
+          console.log(`Fallback model ${modelNameUsed} generation failed as well: ${fallbackError.message}`);
+          return res.status(500).json({ success: false, error: "Gemini API error: " + error.message + " (and fallback failed: " + fallbackError.message + ")" });
+        }
+      } else {
+        return res.status(500).json({ success: false, error: "Gemini API error: " + error.message });
+      }
     }
 
     let rawResult = "";
