@@ -21,6 +21,14 @@ export default function App() {
   const [activeRegionId, setActiveRegionId] = useState<string>('tamil_nadu_erode_2026');
   const [activePresetId, setActivePresetId] = useState<string>('cattle_shed_erode');
   
+  // Real-Time Sliding Settings Configs State
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [concreteGrade, setConcreteGrade] = useState<'M20' | 'M25' | 'M30' | 'M35'>('M25');
+  const [steelGrade, setSteelGrade] = useState<'Fe415' | 'Fe500' | 'Fe550'>('Fe500');
+  const [wastagePercent, setWastagePercent] = useState<number>(12);
+  const [contractorMarginPercent, setContractorMarginPercent] = useState<number>(5);
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
+  
   // Custom uploaded design variables
   const [uploadedBase64, setUploadedBase64] = useState<string | null>(null);
   const [uploadedMimeType, setUploadedMimeType] = useState<string | null>(null);
@@ -191,20 +199,221 @@ export default function App() {
     setUploadedFileName(null);
   };
 
-  // Math totals for dynamic summaries
-  const elementsList = extractedData?.elements || [];
-  const aggregateNetDryCost = elementsList.reduce((sum, el) => sum + (el.total_cost || 0), 0);
-  const grandContractorMargin = Math.round(aggregateNetDryCost * 0.05);
-  const invoiceGrandTotal = aggregateNetDryCost + grandContractorMargin;
+  // Reactive elements list based on settings triggers
+  const elementsList = React.useMemo(() => {
+    if (!extractedData || !extractedData.elements) return [];
+
+    let multiplier = 1.0;
+    if (activeRegionId === 'tamil_nadu_erode_2026') multiplier = 1.0;
+    else if (activeRegionId === 'karnataka_mandya_2026') multiplier = 1.06;
+    else if (activeRegionId === 'kerala_wayanad_2026') multiplier = 1.15;
+    else if (activeRegionId === 'andhra_pradesh_nellore_2026') multiplier = 0.96;
+
+    return extractedData.elements.map(el => {
+      let baseRate = el.unit_rate || 0;
+
+      // Dyn rates for concrete grades
+      if (el.category === 'concrete') {
+        const isSlab = el.element_id === 'EL-SLAB' || el.description.toLowerCase().includes('slab');
+        if (concreteGrade === 'M20') {
+          baseRate = isSlab ? 4200 : 2600;
+        } else if (concreteGrade === 'M25') {
+          baseRate = isSlab ? 5200 : 3200;
+        } else if (concreteGrade === 'M30') {
+          baseRate = isSlab ? 5900 : 3800;
+        } else if (concreteGrade === 'M35') {
+          baseRate = isSlab ? 6500 : 4400;
+        }
+      } 
+      // Dyn rates for steel grades
+      else if (el.category === 'steel') {
+        if (steelGrade === 'Fe415') {
+          baseRate = 68;
+        } else if (steelGrade === 'Fe500') {
+          baseRate = 78;
+        } else if (steelGrade === 'Fe550') {
+          baseRate = 85;
+        }
+      }
+
+      // Multiply by location tariff index
+      baseRate = Math.round(baseRate * multiplier);
+
+      // Convert currency to USD if requested (₹83 = 1 USD)
+      if (currency === 'USD') {
+        baseRate = Math.round((baseRate / 83) * 100) / 100;
+      }
+
+      // Standard design safety factor (dry mix material takeoff metrics multiplier)
+      const wasteFactor = el.category === 'concrete' ? 1.54 : el.category === 'steel' ? 1.05 : el.category === 'masonry' ? 1.10 : el.category === 'finish' ? 1.15 : 1.1;
+      
+      let calculatedTotal = Math.round(el.quantity.value * baseRate * wasteFactor);
+      if (currency === 'USD') {
+        calculatedTotal = Math.round((el.quantity.value * baseRate * wasteFactor) * 100) / 100;
+      }
+
+      return {
+        ...el,
+        unit_rate: baseRate,
+        total_cost: calculatedTotal
+      };
+    });
+  }, [extractedData, activeRegionId, concreteGrade, steelGrade, currency]);
+
+  // Dynamic aggregates
+  const aggregateNetDryCost = React.useMemo(() => {
+    const rawSum = elementsList.reduce((sum, el) => sum + (el.total_cost || 0), 0);
+    return currency === 'USD' ? Math.round(rawSum * 100) / 100 : Math.round(rawSum);
+  }, [elementsList, currency]);
+
+  const calculatedWastageAndContingency = React.useMemo(() => {
+    const amount = aggregateNetDryCost * (wastagePercent / 100);
+    return currency === 'USD' ? Math.round(amount * 100) / 100 : Math.round(amount);
+  }, [aggregateNetDryCost, wastagePercent, currency]);
+
+  const grandContractorMargin = React.useMemo(() => {
+    const amount = aggregateNetDryCost * (contractorMarginPercent / 100);
+    return currency === 'USD' ? Math.round(amount * 100) / 100 : Math.round(amount);
+  }, [aggregateNetDryCost, contractorMarginPercent, currency]);
+
+  const invoiceGrandTotal = React.useMemo(() => {
+    const total = aggregateNetDryCost + calculatedWastageAndContingency + grandContractorMargin;
+    return currency === 'USD' ? Math.round(total * 100) / 100 : Math.round(total);
+  }, [aggregateNetDryCost, calculatedWastageAndContingency, grandContractorMargin, currency]);
 
   // Pie chart calculation by trade Category
-  const categoryTotals: Record<string, number> = {};
-  elementsList.forEach(el => {
-    categoryTotals[el.category] = (categoryTotals[el.category] || 0) + (el.total_cost || 0);
-  });
+  const categoryTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    elementsList.forEach(el => {
+      totals[el.category] = (totals[el.category] || 0) + (el.total_cost || 0);
+    });
+    return totals;
+  }, [elementsList]);
 
   return (
     <div className="min-h-screen bg-[#F5F5DC] text-[#212121] p-4 font-sans selection:bg-[#F9A825] selection:text-[#212121]">
+
+      {/* Dynamic Sliding Configuration Panel Overlay */}
+      <div className={`fixed inset-0 z-50 bg-black/60 transition-opacity duration-300 ${isSettingsOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className={`bg-[#E8E4C9] border-r-4 border-[#3E2723] w-full max-w-sm h-full flex flex-col p-5 shadow-2xl relative transition-transform duration-300 transform ${isSettingsOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          
+          {/* Header */}
+          <div className="flex justify-between items-center border-b-2 border-[#3E2723] pb-3 mb-4">
+            <h3 className="text-xs font-bold text-[#3E2723] uppercase flex items-center gap-1.5" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
+              ⚙️ CONFIG CHEST
+            </h3>
+            <button 
+              onClick={() => setIsSettingsOpen(false)}
+              className="p-1 text-xs font-bold underline cursor-pointer hover:text-red-700 font-mono"
+            >
+              [CLOSE]
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4 font-mono text-xs">
+            {/* Tariff Region */}
+            <div className="space-y-1">
+              <label className="block text-3xs font-bold text-[#5D4037] uppercase">📍 TARIFF REGION:</label>
+              <select 
+                value={activeRegionId} 
+                onChange={(e) => setActiveRegionId(e.target.value)}
+                className="w-full bg-[#F5F5DC] border-3 border-[#3E2723] p-1.5 font-bold outline-none cursor-pointer focus:border-[#F9A825]"
+              >
+                {Object.values(REGIONAL_RATES_DATABASE).map(reg => (
+                  <option key={reg.region_id} value={reg.region_id}>{reg.region_name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Concrete Grade */}
+            <div className="space-y-1">
+              <label className="block text-3xs font-bold text-[#5D4037] uppercase">🧱 CONCRETE GRADE:</label>
+              <div className="grid grid-cols-4 gap-1">
+                {(['M20', 'M25', 'M30', 'M35'] as const).map(g => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setConcreteGrade(g)}
+                    className={`p-1.5 text-center font-bold border-2 border-[#3E2723] text-2xs cursor-pointer ${concreteGrade === g ? 'bg-[#388E3C] text-white animate-pulse' : 'bg-[#9E9E9E] text-black'}`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Steel Grade */}
+            <div className="space-y-1">
+              <label className="block text-3xs font-bold text-[#5D4037] uppercase">⚙️ STEEL REBAR TMT:</label>
+              <div className="grid grid-cols-3 gap-1">
+                {(['Fe415', 'Fe500', 'Fe550'] as const).map(g => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setSteelGrade(g)}
+                    className={`p-1.5 text-center font-bold border-2 border-[#3E2723] text-2xs cursor-pointer ${steelGrade === g ? 'bg-[#388E3C] text-white animate-pulse' : 'bg-[#9E9E9E] text-black'}`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Wastage */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center text-3xs font-bold text-[#5D4037]">
+                <span>🌾 DRY WASTAGE %:</span>
+                <span className="text-[#3E2723] font-black">{wastagePercent}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="5" 
+                max="20" 
+                value={wastagePercent}
+                onChange={(e) => setWastagePercent(parseInt(e.target.value) || 12)}
+                className="w-full h-2 bg-[#9E9E9E] border border-[#3E2723] appearance-none cursor-pointer accent-[#212121]" 
+              />
+            </div>
+
+            {/* Contractor Margin */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center text-3xs font-bold text-[#5D4037]">
+                <span>⛏️ CONTRACTOR MARGIN %:</span>
+                <span className="text-[#3E2723] font-black">{contractorMarginPercent}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="15" 
+                value={contractorMarginPercent}
+                onChange={(e) => setContractorMarginPercent(parseInt(e.target.value) || 5)}
+                className="w-full h-2 bg-[#9E9E9E] border border-[#3E2723] appearance-none cursor-pointer accent-[#212121]" 
+              />
+            </div>
+
+            {/* Currency Block */}
+            <div className="space-y-1">
+              <label className="block text-3xs font-bold text-[#5D4037] uppercase">💵 ACTIVE CURRENCY:</label>
+              <div className="grid grid-cols-2 gap-1">
+                {(['INR', 'USD'] as const).map(cur => (
+                  <button
+                    key={cur}
+                    type="button"
+                    onClick={() => setCurrency(cur)}
+                    className={`p-1.5 text-center font-bold border-2 border-[#3E2723] text-2xs cursor-pointer uppercase ${currency === cur ? 'bg-[#F9A825] text-black' : 'bg-[#9E9E9E] text-black'}`}
+                  >
+                    {cur === 'INR' ? '₹ INR (₹)' : '$ USD ($)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="bg-[#F5F5DC] border-2 border-[#3E2723] p-2.5 text-3xs leading-relaxed text-[#616161]">
+              💡 <strong>HOW IT WORKS:</strong> Prices update in real-time as coefficients scale. Multipliers: TN = 1.0, KA = 1.06, KL = 1.15, AP = 0.96.
+            </div>
+          </div>
+        </div>
+      </div>
       
       {/* HEADER HUD: Pickaxe & Trowel themed toolbar */}
       <header className="max-w-7xl mx-auto blocky-card p-4 flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-3 select-none">
@@ -238,8 +447,21 @@ export default function App() {
             📍 {REGIONAL_RATES_DATABASE[activeRegionId]?.region_name.split(' (')[0]}
           </div>
 
+          {/* Technical Settings Gear Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            style={{ fontFamily: "'Press Start 2P', sans-serif", fontSize: '9px' }}
+            className="px-3 py-2 bg-[#F9A825] text-black border-2 border-[#3E2723] cursor-pointer shadow-[2px_2px_0px_#3E2723] hover:bg-amber-500 active:translate-y-px active:shadow-[0px_0px_0px_#3E2723] font-bold flex items-center gap-1 uppercase font-mono"
+            title="Open Config Chest"
+          >
+            <Settings size={12} className="inline mr-1" />
+            <span>CONFIG</span>
+          </button>
+
           {/* Bilingual Tamil Toggle Widget */}
           <button
+            type="button"
             onClick={() => setLanguage(prev => prev === 'en' ? 'ta' : 'en')}
             style={{ fontFamily: "'Press Start 2P', sans-serif", fontSize: '9px' }}
             className="px-3 py-2 bg-[#5D4037] text-[#F9A825] border-2 border-[#3E2723] cursor-pointer shadow-[2px_2px_0px_#3E2723] hover:bg-[#3E2723] active:translate-y-px active:shadow-[0px_0px_0px_#3E2723] font-bold flex items-center gap-1 font-mono uppercase"
@@ -392,7 +614,7 @@ export default function App() {
 
             <div className="bg-[#3E2723] text-[#F5F5DC] border-2 border-[#3E2723] p-2 text-right">
               <span className="block text-3xs font-mono text-[#E8E4C9]">ESTIMATED GRAND BUDGET</span>
-              <span className="text-base font-bold font-mono text-[#F9A825]">₹{invoiceGrandTotal.toLocaleString()}</span>
+              <span className="text-base font-bold font-mono text-[#F9A825]">{currency === 'USD' ? '$' : '₹'}{invoiceGrandTotal.toLocaleString()}</span>
             </div>
           </div>
 
@@ -561,7 +783,7 @@ export default function App() {
                     <div className="space-y-2 font-semibold">
                       <div className="flex justify-between items-center text-[13px]">
                         <span>Dry Material Aggregate cost:</span>
-                        <span className="text-[#3E2723]">₹{aggregateNetDryCost.toLocaleString()}</span>
+                        <span className="text-[#3E2723]">{currency === 'USD' ? '$' : '₹'}{aggregateNetDryCost.toLocaleString()}</span>
                       </div>
                       
                       <div className="flex justify-between items-center text-[13px]">
@@ -576,12 +798,12 @@ export default function App() {
 
                       <div className="flex justify-between items-center text-[13px]">
                         <span>{t.contractorMarginLabel}</span>
-                        <span className="text-amber-700">₹{grandContractorMargin.toLocaleString()}</span>
+                        <span className="text-amber-700">{currency === 'USD' ? '$' : '₹'}{grandContractorMargin.toLocaleString()}</span>
                       </div>
 
                       <div className="border-t-2 border-[#3E2723] pt-2 flex justify-between items-center text-sm font-bold text-[#212121] uppercase">
                         <span>Grand Estimated total:</span>
-                        <span className="text-lg text-[#388E3C]">₹{invoiceGrandTotal.toLocaleString()}</span>
+                        <span className="text-lg text-[#388E3C]">{currency === 'USD' ? '$' : '₹'}{invoiceGrandTotal.toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -614,12 +836,12 @@ export default function App() {
                           </div>
                         ) : (
                           Object.entries(categoryTotals).map(([cat, val]) => {
-                            const percent = invoiceGrandTotal > 0 ? (val / invoiceGrandTotal) * 100 : 0;
+                            const percent = (invoiceGrandTotal as number) > 0 ? ((val as number) / (invoiceGrandTotal as number)) * 100 : 0;
                             return (
                               <div key={cat} className="space-y-0.5">
                                 <div className="flex justify-between items-center text-3xs font-bold text-[#212121] uppercase">
                                   <span>{t[`cat_${cat}` as keyof LanguageDictionary] || cat}</span>
-                                  <span>₹{val.toLocaleString()} ({percent.toFixed(0)}%)</span>
+                                  <span>{currency === 'USD' ? '$' : '₹'}{val.toLocaleString()} ({percent.toFixed(0)}%)</span>
                                 </div>
                                 
                                 {/* Blocky progress bar represent standard */}
