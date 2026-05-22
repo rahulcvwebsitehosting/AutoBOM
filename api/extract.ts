@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Configuration
@@ -44,9 +44,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cleanedBase64 = imageBase64.split(";base64,").pop() || "";
     }
 
-    // Initialize the official Google Gen AI SDK
-    const ai = new GoogleGenAI({ apiKey });
-
     // Format the image content as dynamic inline data parts
     const imagePart = {
       inlineData: {
@@ -85,17 +82,31 @@ OUTPUT SCHEMA:
 }
 `;
 
-    // Invoke Gemini 2.5 Pro (gemini-2.5-pro-exp-03-25) model as requested
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro-exp-03-25",
-      contents: [imagePart, { text: "Please extract structured Bill of Materials from the provided engineering layout." }],
-      config: {
-        systemInstruction: systemPrompt,
+    // Initialize the official Google Generative AI SDK mapping to gemini-1.5-pro
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-pro",
+      systemInstruction: systemPrompt,
+    });
+
+    // Invoke Gemini 1.5 Pro as requested
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            imagePart,
+            { text: "Please extract structured Bill of Materials from the provided engineering layout." }
+          ]
+        }
+      ],
+      generationConfig: {
         responseMimeType: "application/json",
       },
     });
 
-    const rawResult = response.text ? response.text.trim() : "{}";
+    const response = await result.response;
+    const rawResult = response.text() ? response.text().trim() : "{}";
     const parsedData = JSON.parse(rawResult);
 
     return res.status(200).json({ success: true, data: parsedData });
