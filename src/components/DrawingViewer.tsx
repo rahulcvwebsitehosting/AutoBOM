@@ -10,9 +10,10 @@ interface DrawingViewerProps {
   isLoading: boolean;
   uploadedBase64?: string | null;
   uploadedFileName?: string | null;
+  uploadedMimeType?: string | null;
 }
 
-export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBase64, uploadedFileName }: DrawingViewerProps) {
+export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBase64, uploadedFileName, uploadedMimeType }: DrawingViewerProps) {
   const [zoom, setZoom] = useState<number>(100);
   const [activeLayers, setActiveLayers] = useState({
     concrete: true,
@@ -438,40 +439,47 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
         style={{ backgroundImage: 'repeating-linear-gradient(rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px), repeating-linear-gradient(90deg, rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px)' }}
       >
         {/* SCALE RATIO DESTRUCT BEACON */}
-        {!uploadedBase64 && (
-          <div className="absolute top-2 left-2 block text-[9px] font-mono text-[#212121] bg-[#F9A825] px-2 py-1 border-2 border-[#3E2723] select-none font-bold shadow-[1px_1px_0px_#3E2723]">
-            X: {hoverCoords.x.toFixed(2)} M | Y: {hoverCoords.y.toFixed(2)} M
-          </div>
-        )}
+        <div className="absolute top-2 left-2 block text-[9px] font-mono text-[#212121] bg-[#F9A825] px-2 py-1 border-2 border-[#3E2723] select-none font-bold shadow-[1px_1px_0px_#3E2723]">
+          X: {hoverCoords.x.toFixed(2)} M | Y: {hoverCoords.y.toFixed(2)} M
+        </div>
         <div className="absolute top-2 right-2 hidden sm:block text-[9px] font-mono text-[#388E3C] bg-[#E8E4C9] p-1 border border-[#3E2723] select-none font-bold">
           {uploadedBase64 ? '📊 CLOUD ANALYZER ONLINE' : '⚡ SYSTEM SCANNER LIVE [94%]'}
         </div>
 
-        {uploadedBase64 ? (
-          <div className="flex flex-col items-center justify-center p-6 text-center bg-[#E8E4C9] border-4 border-dashed border-[#5D4037]/60 shadow-[3px_3px_0px_#3E2723] max-w-sm pointer-events-auto">
-            <span className="text-3xl mb-2">📜</span>
-            <p className="font-mono text-xs font-bold text-[#3E2723] mb-3 uppercase tracking-wider">
-              Drawing preview rendering...
-            </p>
-            <button
-              onClick={handleOpenPdf}
-              className="px-3.5 py-2 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-colors border-2 border-[#3E2723] font-bold text-[9px] uppercase tracking-wide cursor-pointer shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5 active:shadow-[1px_1px_0px_#3E2723]"
-              style={{ fontFamily: "'Press Start 2P', sans-serif" }}
-            >
-              [View original PDF]
-            </button>
-            <p className="text-[9px] font-mono text-[#616161] mt-3 font-semibold break-all leading-relaxed">
-              Target Doc: {uploadedFileName || 'custom_document.pdf'}
-            </p>
-          </div>
-        ) : (
-          <div 
-            className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none"
-            style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
-          >
-            {renderBlueprintSVG()}
-          </div>
-        )}
+        <div 
+          className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none animate-fade-in"
+          style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
+        >
+          {uploadedBase64 ? (
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img 
+                src={uploadedBase64} 
+                alt="Uploaded Sheet" 
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+              />
+              {activeLayers.grid && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <svg className="w-full h-full text-[#0277BD]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    {renderGridOverlay(500, 300)}
+                  </svg>
+                </div>
+              )}
+              {!uploadedMimeType?.startsWith('image/') && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-auto bg-black/15">
+                  <button
+                    onClick={handleOpenPdf}
+                    className="px-3 py-1.5 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-colors border-2 border-[#3E2723] font-bold text-[8px] uppercase tracking-wide cursor-pointer shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5"
+                    style={{ fontFamily: "'Press Start 2P', sans-serif" }}
+                  >
+                    [Open PDF in new tab]
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            renderBlueprintSVG()
+          )}
+        </div>
       </div>
 
       {/* Layer HUD Toggles */}
@@ -482,40 +490,36 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
           </span>
           <button 
             type="button"
-            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('concrete')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.concrete ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              activeLayers.concrete ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             🧱 Concrete
           </button>
           <button 
             type="button"
-            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('steel')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.steel ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              activeLayers.steel ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             ⚙️ Steel
           </button>
           <button 
             type="button"
-            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('grid')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.grid ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              activeLayers.grid ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             🏁 Grid
           </button>
           <button 
             type="button"
-            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('notes')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.notes ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              activeLayers.notes ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             📝 Notes
@@ -527,10 +531,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
           <button 
             type="button"
             onClick={handleZoomOut}
-            disabled={!!uploadedBase64}
-            className={`px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#9E9E9E] text-[#212121]'
-            }`}
+            className="px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] bg-[#9E9E9E] text-[#212121]"
             style={{ fontFamily: "'Press Start 2P', sans-serif" }}
             title="Zoom Out"
           >
@@ -542,10 +543,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
           <button 
             type="button"
             onClick={handleZoomIn}
-            disabled={!!uploadedBase64}
-            className={`px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#9E9E9E] text-[#212121]'
-            }`}
+            className="px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] bg-[#9E9E9E] text-[#212121]"
             style={{ fontFamily: "'Press Start 2P', sans-serif" }}
             title="Zoom In"
           >
@@ -555,10 +553,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
           <button
             type="button"
             onClick={handleReset}
-            disabled={!!uploadedBase64}
-            className={`px-3 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] font-bold select-none text-[8px] uppercase tracking-wider ${
-              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#388E3C] text-white hover:bg-[#2E7D32] cursor-pointer'
-            }`}
+            className="px-3 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] font-bold select-none text-[8px] uppercase tracking-wider bg-[#388E3C] text-white hover:bg-[#2E7D32] cursor-pointer"
             style={{ fontFamily: "'Press Start 2P', sans-serif" }}
             title="Reset View and Pan"
           >

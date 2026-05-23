@@ -48,14 +48,18 @@ export default function App() {
   const [uploadDurationExceeded, setUploadDurationExceeded] = useState<boolean>(false);
   const [hasAutoRetried, setHasAutoRetried] = useState<boolean>(false);
 
+  const timerRef = React.useRef<number | null>(null);
+
   // Monitor upload/extraction duration dynamically
   useEffect(() => {
-    let timer: NodeJS.Timeout;
     let elapsed = 0;
     
     if (isLoading) {
       setUploadDurationExceeded(false);
-      timer = setInterval(() => {
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+      }
+      timerRef.current = window.setInterval(() => {
         elapsed += 1;
         if (elapsed >= 30) {
           setUploadDurationExceeded(true);
@@ -68,9 +72,18 @@ export default function App() {
       }, 1000);
     } else {
       setUploadDurationExceeded(false);
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
     
-    return () => clearInterval(timer);
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [isLoading, hasAutoRetried, uploadedBase64, uploadedMimeType]);
 
   const [isDraggingUpload, setIsDraggingUpload] = useState<boolean>(false);
@@ -1067,6 +1080,7 @@ export default function App() {
                 isLoading={isLoading} 
                 uploadedBase64={uploadedBase64}
                 uploadedFileName={uploadedFileName}
+                uploadedMimeType={uploadedMimeType}
               />
             )}
 

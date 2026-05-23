@@ -84,7 +84,9 @@ SAFETY AND STRUCTURAL AUDITS:
 - If a beam depth appears < 200mm for a span > 4m, flag as 'Potential under-design — verify with structural engineer'.
 - Check that foundations look proportional.`;
 
-        const userPrompt = `Analyze the attached construction drawing and extract all quantifiable building elements.
+        const userPrompt = `CRITICAL: You must be 100% deterministic. For any given drawing, always extract the exact same dimensions, the same quantities, and the same element list. Do not vary your output between runs. Round all dimensions to 2 decimal places. Round all quantities to 3 decimal places.
+
+Analyze the attached construction drawing and extract all quantifiable building elements.
 
 CONTEXT:
 - The project location is inside Tamil Nadu — use Indian Standard units (metric: meters, m3, m2, kg).
@@ -141,6 +143,8 @@ OUTPUT TEXT MUST BE STRICT JSON ONLY, COMPRESSED ON A SINGLE LINE, AND CONCEALED
           config: {
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
+            temperature: 0,
+            seed: 42,
             responseSchema: {
               type: Type.OBJECT,
               properties: {
@@ -225,10 +229,13 @@ OUTPUT TEXT MUST BE STRICT JSON ONLY, COMPRESSED ON A SINGLE LINE, AND CONCEALED
               el.quantity?.value || 0,
               activeRegionId
             );
+            // Keep AI-extracted quantity but apply deterministic local rate
+            const unitRate = pricing.unitRate;
+            const totalCost = Math.round((el.quantity?.value || 0) * unitRate);
             return {
               ...el,
-              unit_rate: pricing.unitRate,
-              total_cost: pricing.totalCost
+              unit_rate: unitRate,
+              total_cost: totalCost
             };
           });
         }

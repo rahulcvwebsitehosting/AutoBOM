@@ -22,6 +22,19 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
   const [hoveredElement, setHoveredElement] = useState<BOQElement | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  const isTouchDevice = typeof window !== 'undefined' && 'ontouchstart' in window;
+
+  React.useEffect(() => {
+    if (!isTouchDevice) return;
+    const handleOutsideClick = () => {
+      setHoveredElement(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+    };
+  }, [isTouchDevice]);
+
   const getTooltipText = (el: BOQElement) => {
     const idLower = (el.element_id || '').toLowerCase();
     const descLower = (el.description || '').toLowerCase();
@@ -431,19 +444,19 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
 
       {/* Main Table responsive scroll container */}
       <div className="w-full overflow-x-auto border-4 border-[#3E2723] bg-[#F5F5DC]">
-        <table className="w-full text-left border-collapse font-sans min-w-[900px]">
+        <table className="w-full text-left border-collapse font-sans min-w-[800px] xl:min-w-full">
           <thead>
             <tr className="bg-[#5D4037] text-[#F5F5DC] font-mono text-xs border-b-4 border-[#3E2723]">
-              <th className="p-3 border-r-2 border-[#3E2723] text-center w-12">{t.eleId}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-36">{t.eleCategory}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-56">{t.eleDescription}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-28">{t.eleLocation}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-24 text-right">{t.eleQuantity}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-32 text-right">{t.eleRate}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-16 text-center">{t.eleWaste}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-32 text-right">{t.eleCost}</th>
-              <th className="p-3 border-r-2 border-[#3E2723] w-40">{t.eleCodeRef}</th>
-              <th className="p-3 text-center w-24">Actions</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] text-center w-12">{t.eleId}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-36">{t.eleCategory}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-56">{t.eleDescription}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-28">{t.eleLocation}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-24 text-right">{t.eleQuantity}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-32 text-right">{t.eleRate}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-16 text-center">{t.eleWaste}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-32 text-right">{t.eleCost}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 border-r-2 border-[#3E2723] w-40">{t.eleCodeRef}</th>
+              <th className="sticky top-0 bg-[#5D4037] z-10 p-3 text-center w-24">Actions</th>
             </tr>
           </thead>
 
@@ -462,10 +475,31 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
                 return (
                   <tr 
                     key={el.element_id} 
-                    onMouseEnter={() => setHoveredElement(el)}
-                    onMouseLeave={() => setHoveredElement(null)}
+                    onMouseEnter={() => {
+                      if (!isTouchDevice) setHoveredElement(el);
+                    }}
+                    onMouseLeave={() => {
+                      if (!isTouchDevice) setHoveredElement(null);
+                    }}
                     onMouseMove={(e) => {
-                      setTooltipPos({ x: e.clientX, y: e.clientY });
+                      if (!isTouchDevice) {
+                        setTooltipPos({ x: e.clientX, y: e.clientY });
+                      }
+                    }}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button') || target.closest('input') || target.closest('select')) {
+                        return;
+                      }
+                      if (isTouchDevice) {
+                        e.stopPropagation();
+                        if (hoveredElement?.element_id === el.element_id) {
+                          setHoveredElement(null);
+                        } else {
+                          setHoveredElement(el);
+                          setTooltipPos({ x: e.clientX, y: e.clientY });
+                        }
+                      }
                     }}
                     className={`hover:bg-[#E8E4C9] transition-colors border-b border-[#3E2723] relative ${
                       el.verification_required ? 'bg-[#F9A825]/10' : ''
@@ -629,12 +663,12 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
         <div 
           style={{
             position: 'fixed',
-            left: `${tooltipPos.x + 8}px`,
-            top: `${tooltipPos.y + 12}px`,
+            left: `${Math.min(window.innerWidth - 300, Math.max(10, tooltipPos.x + 8))}px`,
+            top: `${Math.min(window.innerHeight - 150, Math.max(10, tooltipPos.y + 12))}px`,
             pointerEvents: 'none',
             zIndex: 9999,
           }}
-          className="bg-[#212121E6] border-2 border-[#3E2723] p-3 text-xs text-white max-w-sm rounded-none shadow-lg font-mono border-solid"
+          className="bg-[#212121E6] border-2 border-[#3E2723] p-3 text-xs text-white max-w-xs sm:max-w-sm rounded-none shadow-lg font-mono border-solid"
         >
           <div className="text-[#F9A825] font-bold mb-1 uppercase tracking-wide text-[10px]" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
             Calculation Notes

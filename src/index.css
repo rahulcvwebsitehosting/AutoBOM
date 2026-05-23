@@ -57,4 +57,18 @@
   background: #3E2723;
 }
 
+/* Responsive Table & Blocky Card Media Query adjustments */
+@media (max-width: 640px) {
+  table th, table td {
+    font-size: 0.75rem !important;
+    padding: 0.5rem !important;
+  }
+  .blocky-card {
+    border-width: 3px !important;
+    box-shadow: 2px 2px 0px #3E2723 !important;
+    padding: 0.75rem !important;
+    max-width: 100% !important;
+  }
+}
+
 
