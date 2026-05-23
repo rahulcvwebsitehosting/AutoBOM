@@ -49,11 +49,11 @@
 
 India is home to over 110 million dairy cattle, representing the backbone of our rural farming family economy. To keep herds healthy, clean, and productive, farmers must build custom-engineered, ventilated cattle sheds. Yet, when a rural landowner or small-scale local builder tries to estimate the cost of construction, they hit a solid wall of technological exclusion.
 
-Small rural contractors in districts like Erode and Salem spend three to four tedious days manually calculating concrete takeoffs, structural rebar weight, and masonry volume using paper scales and pocket calculators. A single structural estimate from a professional consulting surveyor costs anywhere between ₹5,000 to ₹15,000—a steep price that delays construction projects by weeks. 
+Small contractors in Tamil Nadu charge ₹5,000 to ₹15,000 just for the estimation part of a small project—a steep price that delays agricultural civil work by weeks. For the contractors I spoke to in Perundurai who build cattle sheds, estimating concrete structural takeoffs and rebar weights manually takes three to four working days.
 
-Commercial software packages like PlanSwift, Bluebeam, or professional CAD takeoff suites are built for high-rise steel buildings and highway flyovers. They require expensive corporate subscriptions and advanced workstations, rendering them completely inaccessible to a contractor operating from a field worksite. As a result, rural projects suffer from frequent budget overruns due to miscalculated material estimates.
+Commercial software packages like PlanSwift, Bluebeam, or professional CAD takeoff suites are built for high-rise steel buildings and highway flyovers. They require expensive corporate subscriptions and advanced workstations, rendering them completely inaccessible to a contractor operating from a field worksite. As a result, rural projects suffer from frequent budget overruns due to manual calculation errors.
 
-> "I watched my dad — a small contractor in Chennai — spend every Sunday with a calculator and scale. Construction hasn't changed in 50 years. That stuck with me." — Rahul, Founder
+> "My batchmates and I spend hours every week on manual quantity takeoffs for our civil engineering assignments. The frustration of watching them spend Sundays on manual calculations showed me how broken the process of estimation currently is." — Rahul, Founder
 
 ---
 
@@ -66,6 +66,14 @@ Our application harnesses the power of Google Gemini 2.5 Pro Vision to ingest st
 AutoBOM does not just parse text; it understands physical spatial relationships. It reconciles extracted dimensions with the strict provisions of Indian Standards (including **IS 456**, **IS 1786**, **IS 1077**, and **IS 2571**) to guarantee design safety. The computed outputs then integrate with regional tariff databases for Tamil Nadu, Karnataka, Kerala, and Andhra Pradesh to produce accurate, localized cost reports in native currencies.
 
 To keep the system intuitive on the field, we rejected generic corporate dashboard templates in favor of a clean, interactive **Craft & Construct** visual system. Taking creative inspiration from structured grid inventory management layouts, we designed a responsive workspace that feels familiar, operates immediately, and makes complex quantity surveying feel as simple as building block by block.
+
+### Project Origin & Inspiration
+
+AutoBOM was created by Rahul, a 2nd year BE Civil Engineering student at Erode Sengunthar Engineering College, staying in the hostel at Perundurai. 
+
+The idea was sparked on **April 30, 2026**, after hearing Shri. Gobinath Chandran's inspiring address on automation and civil engineering at our Annual Day. Frustrated by the hours my batchmates and I spend every week on manual quantity takeoffs and BOQs for college assignments, I realized we could build an AI-powered system to automate this tedious task. 
+
+I built AutoBOM to solve this and tested it with local contractors in the Perundurai area and classmates. My father is an accountant (not involved in construction), but seeing his meticulous attention to financial details inspired me to design a system with perfect billing accuracy.
 
 ---
 
@@ -209,10 +217,10 @@ Most importantly, our field tests with local masons and builders in Erode taught
 This project represents the combined support of many communities and teachers:
 
 - **Build with Gemini XPRIZE** — For offering an annual platform hosting the $2,000,000 developer competition to solve real problems.
-- **Google AI Studio** — For providing a incredibly fast and robust prototyping playground.
-- **Erode Sengunthar Engineering College** — For organizing the annual presentation day where we first demonstrated manual agricultural estimates.
-- **Shri. Gobinath Chandran** — Whose inspiring address on using AI for automation motivated us to build solutions focused on rural empowerment.
-- **My Father** — The very first contractor to test AutoBOM on actual brick walls.
+- **Google AI Studio** — For providing an incredibly fast and robust prototyping playground.
+- **Erode Sengunthar Engineering College** — For organizing the annual presentation day where we first demonstrated manual agricultural estimates, and for hosting us as civil engineering students.
+- **Shri. Gobinath Chandran** — Whose inspiring address on April 30, 2026, about using AI for automation motivated us to build solutions focused on rural empowerment.
+- **My Father** — An accountant (not involved in construction), who taught me the value of precision, attention to financial detail, and rigorous cost accounting.
 
 ---
 

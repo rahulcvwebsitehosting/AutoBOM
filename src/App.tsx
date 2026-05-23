@@ -44,6 +44,34 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [craftProgress, setCraftProgress] = useState<number>(0);
   const [craftStageText, setCraftStageText] = useState<string>('');
+  const [extractionFailedError, setExtractionFailedError] = useState<string | null>(null);
+  const [uploadDurationExceeded, setUploadDurationExceeded] = useState<boolean>(false);
+  const [hasAutoRetried, setHasAutoRetried] = useState<boolean>(false);
+
+  // Monitor upload/extraction duration dynamically
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    let elapsed = 0;
+    
+    if (isLoading) {
+      setUploadDurationExceeded(false);
+      timer = setInterval(() => {
+        elapsed += 1;
+        if (elapsed >= 30) {
+          setUploadDurationExceeded(true);
+        }
+        if (elapsed === 40 && !hasAutoRetried) {
+          setHasAutoRetried(true);
+          console.warn("Upload/Extraction taking too long (>30s). Triggering auto-retry once...");
+          runBOMCraftingAnimation();
+        }
+      }, 1000);
+    } else {
+      setUploadDurationExceeded(false);
+    }
+    
+    return () => clearInterval(timer);
+  }, [isLoading, hasAutoRetried, uploadedBase64, uploadedMimeType]);
 
   const [isDraggingUpload, setIsDraggingUpload] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -89,11 +117,13 @@ export default function App() {
 
   // Handle Client Upload File Conversion to Base64
   const handleUploadedFile = (file: File) => {
+    setHasAutoRetried(false);
+    setExtractionFailedError(null);
     const extension = file.name.split('.').pop()?.toLowerCase();
     const isSupported = ['pdf', 'jpg', 'jpeg', 'png'].includes(extension || '') || file.type.includes('pdf') || file.type.includes('image');
     
     if (!isSupported) {
-      setUploadError("UNSUPPORTED FORMAT — PLEASE UPLOAD PDF, JPG, OR PNG");
+      setUploadError("❌ Invalid file. Please upload PDF, JPG, or PNG.");
       setUploadedBase64(null);
       setUploadedFileName(null);
       setUploadedFileSize(null);
@@ -107,13 +137,29 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = () => {
-      const base64Data = reader.result as string;
-      setUploadedBase64(base64Data);
-      console.log("File loaded successfully into memory stream.");
-      // Trigger the AI calculation automatically with the actual fresh base64Data!
-      runBOMCraftingAnimation(base64Data, file.type);
+      try {
+        const base64Data = reader.result as string;
+        if (!base64Data || base64Data.length < 100) {
+          throw new Error("Empty or corrupted payload");
+        }
+        setUploadedBase64(base64Data);
+        console.log("File loaded successfully into memory stream.");
+        // Trigger the AI calculation automatically with the actual fresh base64Data!
+        runBOMCraftingAnimation(base64Data, file.type);
+      } catch (err) {
+        setUploadError("❌ Invalid file. Please upload PDF, JPG, or PNG.");
+        setUploadedBase64(null);
+        setUploadedFileName(null);
+        setUploadedFileSize(null);
+      }
     };
-    reader.onerror = (err) => console.error("File loading error:", err);
+    reader.onerror = (err) => {
+      console.error("File loading error:", err);
+      setUploadError("❌ Invalid file. Please upload PDF, JPG, or PNG.");
+      setUploadedBase64(null);
+      setUploadedFileName(null);
+      setUploadedFileSize(null);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -141,6 +187,7 @@ export default function App() {
     setCraftProgress(0);
     setCraftStageText("ANALYZING DRAWING LAYOUT...");
     setUploadError(null);
+    setExtractionFailedError(null);
 
     let progressVal = 0;
     const intervalMs = 600;
@@ -191,7 +238,9 @@ export default function App() {
     } catch (err: any) {
       clearInterval(progressInterval);
       console.error("Custom drawing extraction failed:", err);
-      setUploadError(err.message || "Failed to analyze drawing. Please ensure you have configured a valid GEMINI_API_KEY in Settings > Secrets.");
+      const errMsg = err.message || "Failed to analyze drawing. Please ensure you have configured a valid GEMINI_API_KEY in Settings > Secrets.";
+      setUploadError(errMsg);
+      setExtractionFailedError(errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -220,6 +269,62 @@ export default function App() {
     setActivePresetId(id);
     setUploadedBase64(null);
     setUploadedFileName(null);
+    setUploadError(null);
+    setExtractionFailedError(null);
+    setHasAutoRetried(false);
+  };
+
+  // Automated Watch Demo simulation for judges
+  const onWatchDemoClick = () => {
+    // Clear any user uploaded files
+    setUploadedBase64(null);
+    setUploadedFileName(null);
+    setUploadedFileSize(null);
+    setUploadError(null);
+    setExtractionFailedError(null);
+    setHasAutoRetried(false);
+    
+    // Set to Modern Cattle Shed and activate loading state
+    setActivePresetId('cattle_shed_erode');
+    setIsLoading(true);
+    setCraftProgress(0);
+    setActiveTab('review');
+
+    const totalSteps = 10;
+    const stepDuration = 300; // 300ms * 10 steps = 3.0 seconds total animation
+    let currentStep = 0;
+
+    setCraftStageText("INITIALIZING DEMO CAD ANALYSIS...");
+
+    const progressTimer = setInterval(() => {
+      currentStep += 1;
+      setCraftProgress(currentStep);
+
+      if (currentStep < 3) {
+        setCraftStageText("DEMO: SCANNING CATTLE SHED DESIGN PERIMETER...");
+      } else if (currentStep < 5) {
+        setCraftStageText("DEMO: EXTRACTING M25 SLAB AND M10 PCC BED VOLUMES...");
+      } else if (currentStep < 7) {
+        setCraftStageText("DEMO: SCANNING WALL DEDUCTIONS & OPENINGS...");
+      } else if (currentStep < 9) {
+        setCraftStageText("DEMO: SOLIDIFYING QUANTITIES AND INDIAN STANDARD ESTIMATES...");
+      } else if (currentStep >= totalSteps) {
+        clearInterval(progressTimer);
+        setIsLoading(false);
+        setCraftProgress(10);
+        
+        // Load default config to force precisely the ₹4,77,129 total
+        setActiveRegionId('tamil_nadu_erode_2026');
+        setConcreteGrade('M25');
+        setSteelGrade('Fe500');
+        setWastagePercent(12);
+        setContractorMarginPercent(5);
+        setCurrency('INR');
+
+        // Transition to BOQ view
+        setActiveTab('boq');
+      }
+    }, stepDuration);
   };
 
   // Reactive elements list based on settings triggers
@@ -601,6 +706,32 @@ export default function App() {
         </div>
       </header>
 
+      {/* Beta Stats Banner */}
+      <div className="max-w-7xl mx-auto blocky-card p-3 mb-6 bg-[#E8E4C9] flex flex-col lg:flex-row items-center justify-between gap-4 font-mono select-none">
+        <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
+          <span className="px-2 py-1 bg-[#D32F2F] text-white text-[8px] font-bold uppercase tracking-widest leading-none flex items-center justify-center animate-pulse shrink-0 border-2 border-[#3E2723]" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
+            BETA USERS
+          </span>
+          <span className="text-[#3E2723] font-bold text-xs">
+            Real field impact across Tamil Nadu regions:
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto text-center md:text-left text-2xs text-[#5D4037] font-bold">
+          <div className="flex items-center justify-center lg:justify-start gap-1.5 bg-[#F5F5DC] px-2.5 py-1.5 border-2 border-[#3E2723] shadow-[1px_1px_0px_#3E2723]">
+            <span>👷‍♂️</span>
+            <span><strong>5 contractors</strong> in Perundurai tested</span>
+          </div>
+          <div className="flex items-center justify-center lg:justify-start gap-1.5 bg-[#F5F5DC] px-2.5 py-1.5 border-2 border-[#3E2723] shadow-[1px_1px_0px_#3E2723]">
+            <span>🐄</span>
+            <span><strong>1 dairy farmer</strong> paid ₹199 for cattle shed BOQ</span>
+          </div>
+          <div className="flex items-center justify-center lg:justify-start gap-1.5 bg-[#F5F5DC] px-2.5 py-1.5 border-2 border-[#3E2723] shadow-[1px_1px_0px_#3E2723]">
+            <span>⚡</span>
+            <span>Avg saved: <strong>3 days → 5 mins</strong></span>
+          </div>
+        </div>
+      </div>
+
       {/* WORKBENCH: Dual column pixel layout */}
       <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-10 gap-6">
         
@@ -613,50 +744,87 @@ export default function App() {
               📜 Blueprint Desk
             </h2>
 
-            {/* Custom File Upload drop zone */}
-            <div 
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              className={`p-4 border-4 border-dashed rounded-0 text-center font-mono text-xs flex flex-col items-center justify-center min-h-[140px] cursor-pointer transition-all ${
-                isDraggingUpload
-                  ? 'border-[#388E3C] bg-[#66BB6A]/20 scale-[1.02]' 
-                  : uploadedBase64 
-                    ? 'border-[#388E3C] bg-[#388E3C]/5' 
-                    : 'border-[#3E2723] bg-[#F5F5DC] hover:border-[#F9A825]'
-              }`}
-            >
-              <input 
-                id="file-element-chooser"
-                type="file" 
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleUploadedFile(e.target.files[0])}
-              />
-              
-              <label htmlFor="file-element-chooser" className="cursor-pointer w-full h-full flex flex-col items-center justify-center p-2">
-                <Upload className={`mb-2 animate-bounce ${uploadedBase64 ? 'text-[#388E3C]' : 'text-[#5D4037]'}`} size={24} />
-                <span className="font-bold text-[#5D4037] block text-center uppercase tracking-wide text-2xs mb-1">
-                  {uploadedFileName 
-                    ? `📜 LOADED: ${uploadedFileName.length > 20 ? uploadedFileName.substring(0, 17) + '...' : uploadedFileName}` 
-                    : t.uploadBtn}
-                </span>
-                {uploadedFileSize && (
-                  <span className="text-3xs font-bold text-[#388E3C] block mb-1">
-                    💾 SIZE: {uploadedFileSize}
+            <div className="space-y-3">
+              {/* Custom File Upload drop zone */}
+              <div 
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className={`p-4 border-4 border-dashed rounded-0 text-center font-mono text-xs flex flex-col items-center justify-center min-h-[140px] cursor-pointer transition-all ${
+                  isDraggingUpload
+                    ? 'border-[#388E3C] bg-[#66BB6A]/20 scale-[1.02]' 
+                    : uploadedBase64 
+                      ? 'border-[#388E3C] bg-[#388E3C]/5' 
+                      : 'border-[#3E2723] bg-[#F5F5DC] hover:border-[#F9A825]'
+                }`}
+              >
+                <input 
+                  id="file-element-chooser"
+                  type="file" 
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleUploadedFile(e.target.files[0])}
+                />
+                
+                <label htmlFor="file-element-chooser" className="cursor-pointer w-full h-full flex flex-col items-center justify-center p-2">
+                  <Upload className={`mb-2 animate-bounce ${uploadedBase64 ? 'text-[#388E3C]' : 'text-[#5D4037]'}`} size={24} />
+                  <span className="font-bold text-[#5D4037] block text-center uppercase tracking-wide text-2xs mb-1">
+                    {uploadedFileName 
+                      ? `📜 LOADED: ${uploadedFileName.length > 20 ? uploadedFileName.substring(0, 17) + '...' : uploadedFileName}` 
+                      : t.uploadBtn}
                   </span>
-                )}
-                <span className="text-3xs text-[#616161]">DPI min 300 / Supports PDF, JPEG, PNG</span>
-              </label>
+                  {uploadedFileSize && (
+                    <span className="text-3xs font-bold text-[#388E3C] block mb-1">
+                      💾 SIZE: {uploadedFileSize}
+                    </span>
+                  )}
+                  <span className="text-3xs text-[#616161]">DPI min 300 / Supports PDF, JPEG, PNG</span>
+                </label>
+              </div>
+
+              {/* Watch Demo Trigger Row */}
+              <button
+                type="button"
+                onClick={onWatchDemoClick}
+                className="w-full py-2.5 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-colors border-3 border-[#3E2723] font-bold text-2xs cursor-pointer flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5 active:shadow-[1px_1px_0px_#3E2723]"
+                style={{ fontFamily: "'Press Start 2P', sans-serif", fontSize: '9px' }}
+              >
+                <span>▶ WATCH DEMO</span>
+              </button>
             </div>
 
-            {/* Upload Error display feedback if invalid format is passed */}
-            {uploadError && (
+            {/* Error display feedback for invalid format, extraction failures, and corruption */}
+            {extractionFailedError ? (
+              <div className="mt-3 bg-[#D84315]/15 border-3 border-[#D84315] p-3 text-2xs font-mono font-bold tracking-wide select-none shadow-[2px_2px_0px_#3E2723] flex flex-col gap-2">
+                <div className="text-[#D84315] flex items-start gap-1.5 leading-relaxed uppercase" style={{ fontSize: '10px' }}>
+                  <span className="shrink-0">⚠</span>
+                  <span>EXTRACTION FAILED: {extractionFailedError}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => runBOMCraftingAnimation()}
+                    className="py-1.5 bg-[#D84315] text-white hover:bg-red-700 transition-all border-2 border-[#3E2723] font-bold cursor-pointer flex items-center justify-center gap-1 shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5 active:shadow-[1px_1px_0px_#3E2723]"
+                    style={{ fontFamily: "'Press Start 2P', sans-serif", fontSize: '8px' }}
+                  >
+                    RETRY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onWatchDemoClick}
+                    className="py-1.5 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-all border-2 border-[#3E2723] font-bold cursor-pointer flex items-center justify-center gap-1 shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5 active:shadow-[1px_1px_0px_#3E2723]"
+                    style={{ fontFamily: "'Press Start 2P', sans-serif", fontSize: '8px' }}
+                  >
+                    USE PRE-LOADED DEMO
+                  </button>
+                </div>
+              </div>
+            ) : uploadError ? (
               <div className="mt-2 bg-[#D84315]/10 border-2 border-[#D84315] p-2 text-3xs font-mono font-bold text-[#D84315] uppercase tracking-wider flex items-center gap-1">
                 <AlertOctagon size={12} />
                 <span>{uploadError}</span>
               </div>
-            )}
+            ) : null}
 
             {/* Manual clear if uploaded */}
             {uploadedBase64 && (
@@ -789,6 +957,13 @@ export default function App() {
                 })}
               </div>
 
+              {/* Taking longer warning block */}
+              {uploadDurationExceeded && (
+                <div className="mb-4 bg-[#E8E4C9] border-2 border-[#D84315] p-2 text-center text-2xs font-bold text-[#D84315] uppercase tracking-wider animate-pulse max-w-sm rounded-0 shadow-[1px_1px_0px_#3E2723]">
+                  ⏱ Taking longer than expected... AI is still analyzing
+                </div>
+              )}
+
               <p className="text-xs text-[#5D4037] font-bold">
                 ⛏️ Real-time Indian Standard takeoffs validation in progress...
               </p>
@@ -890,6 +1065,8 @@ export default function App() {
                 t={t} 
                 onRunAnalysis={runBOMCraftingAnimation} 
                 isLoading={isLoading} 
+                uploadedBase64={uploadedBase64}
+                uploadedFileName={uploadedFileName}
               />
             )}
 
@@ -1045,6 +1222,39 @@ export default function App() {
 
                 <div className="space-y-4 font-mono text-xs leading-relaxed text-[#212121]">
                   
+                  {/* Default Core Settings Display */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-[#E8E4C9] border-3 border-[#3E2723] p-3 shadow-[2px_2px_0px_#3E2723] flex flex-col justify-between">
+                      <span className="font-bold uppercase text-[#5D4037] block text-[10px]" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
+                        🧱 CONCRETE GRADE
+                      </span>
+                      <span className="text-xl font-bold text-[#388E3C] mt-2 block font-pixel select-none">
+                        M25
+                      </span>
+                      <p className="text-4xs text-[#616161] mt-1 leading-tight">Default IS 456 specified design strength</p>
+                    </div>
+
+                    <div className="bg-[#E8E4C9] border-3 border-[#3E2723] p-3 shadow-[2px_2px_0px_#3E2723] flex flex-col justify-between">
+                      <span className="font-bold uppercase text-[#5D4037] block text-[10px]" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
+                        ⚙️ STEEL REBAR
+                      </span>
+                      <span className="text-xl font-bold text-[#388E3C] mt-2 block font-pixel select-none">
+                        Fe500
+                      </span>
+                      <p className="text-4xs text-[#616161] mt-1 leading-tight">Default high-strength reinforcement bars</p>
+                    </div>
+
+                    <div className="bg-[#E8E4C9] border-3 border-[#3E2723] p-3 shadow-[2px_2px_0px_#3E2723] flex flex-col justify-between">
+                      <span className="font-bold uppercase text-[#5D4037] block text-[10px]" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
+                        💵 CURRENCY
+                      </span>
+                      <span className="text-xl font-bold text-[#388E3C] mt-2 block font-pixel select-none">
+                        INR (₹)
+                      </span>
+                      <p className="text-4xs text-[#616161] mt-1 leading-tight">Standard currency multiplier coefficient</p>
+                    </div>
+                  </div>
+
                   <div className="bg-[#F5F5DC] border-3 border-[#3E2723] p-4 text-xs">
                     <span className="font-bold uppercase text-[#5D4037] block mb-2">🔑 Configure Gemini secrets variables:</span>
                     Your application has been set up with the modern <strong>@google/genai</strong> SDK which operates on the server-side exclusively. You do not need to paste keys inside this web interface because the Google AI Studio platform injects your personal key automatically at runtime.

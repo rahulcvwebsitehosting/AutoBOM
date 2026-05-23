@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { PresetDrawing } from '../presets';
-import { ZoomIn, ZoomOut, Layers, ShieldCheck, Compass, CheckCircle2 } from 'lucide-react';
+import { Layers, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { LanguageDictionary } from '../tamilStrings';
 
 interface DrawingViewerProps {
@@ -8,9 +8,11 @@ interface DrawingViewerProps {
   t: LanguageDictionary;
   onRunAnalysis: () => void;
   isLoading: boolean;
+  uploadedBase64?: string | null;
+  uploadedFileName?: string | null;
 }
 
-export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingViewerProps) {
+export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBase64, uploadedFileName }: DrawingViewerProps) {
   const [zoom, setZoom] = useState<number>(100);
   const [activeLayers, setActiveLayers] = useState({
     concrete: true,
@@ -27,6 +29,69 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverCoords, setHoverCoords] = useState({ x: 0.00, y: 0.00 });
 
+  // Dynamically parse physical grid size in meters as configured in the preset
+  const parseGridSize = () => {
+    try {
+      const match = preset.gridSize.toLowerCase().match(/(\d+)\s*m\s*x\s*(\d+)\s*m/);
+      if (match) {
+        return { w: parseInt(match[1], 10), h: parseInt(match[2], 10) };
+      }
+    } catch (e) {}
+    
+    // Explicit system fallbacks
+    if (preset.id === 'fencing_salem' || preset.id === 'dry_granite_post_fencing_new') {
+      return { w: 30, h: 20 };
+    }
+    if (preset.id === 'harvesting_pond_perundurai') {
+      return { w: 20, h: 20 };
+    }
+    if (preset.id === 'grain_silo_gobi' || preset.id === 'paddy_storage_godown_new') {
+      return { w: 12, h: 10 };
+    }
+    return { w: 15, h: 10 };
+  };
+
+  // Helper to render interactive 1m x 1m light-gray grid lines
+  const renderGridOverlay = (viewBoxWidth = 500, viewBoxHeight = 300) => {
+    if (!activeLayers.grid) return null;
+    const { w, h } = parseGridSize();
+    
+    // Spacing in viewBox units
+    const stepX = viewBoxWidth / w;
+    const stepY = viewBoxHeight / h;
+    
+    return (
+      <g stroke="#B0BEC5" strokeWidth="0.75" opacity="0.5">
+        {/* Draw vertical lines representing every 1 meter */}
+        {Array.from({ length: w + 1 }).map((_, i) => (
+          <line
+            key={`grid-v-${i}`}
+            x1={i * stepX}
+            y1={0}
+            x2={i * stepX}
+            y2={viewBoxHeight}
+            strokeDasharray={i % 5 === 0 ? "none" : "2 2"}
+            stroke={i % 5 === 0 ? "#90A4AE" : "#CFD8DC"}
+            strokeWidth={i % 5 === 0 ? "1.25" : "0.75"}
+          />
+        ))}
+        {/* Draw horizontal lines representing every 1 meter */}
+        {Array.from({ length: h + 1 }).map((_, i) => (
+          <line
+            key={`grid-h-${i}`}
+            x1={0}
+            y1={i * stepY}
+            x2={viewBoxWidth}
+            y2={i * stepY}
+            strokeDasharray={i % 5 === 0 ? "none" : "2 2"}
+            stroke={i % 5 === 0 ? "#90A4AE" : "#CFD8DC"}
+            strokeWidth={i % 5 === 0 ? "1.25" : "0.75"}
+          />
+        ))}
+      </g>
+    );
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
@@ -37,8 +102,44 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
       const rect = containerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const xVal = Math.max(0, Math.min(15, (mouseX / rect.width) * 15));
-      const yVal = Math.max(0, Math.min(8, (mouseY / rect.height) * 8));
+
+      const { w, h } = parseGridSize();
+
+      // Center of the outer container boundaries
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+
+      // Position relative to container center
+      const rx = mouseX - cx;
+      const ry = mouseY - cy;
+
+      // Offset for current pan coordinates
+      const px = rx - pan.x;
+      const py = ry - pan.y;
+
+      // Scale back by zoom level
+      const zScale = zoom / 100;
+      const sx = px / zScale;
+      const sy = py / zScale;
+
+      // Base dimension envelope of the SVG (constrained viewport scale matches 440m max width and 260m height)
+      const baseWidth = Math.min(rect.width - 32, 440);
+      const baseHeight = 260;
+
+      // Convert centered coordinates range back to standard grid coordinates (0..w and 0..h)
+      const leftOffset = -baseWidth / 2;
+      const topOffset = -baseHeight / 2;
+
+      let pctX = (sx - leftOffset) / baseWidth;
+      let pctY = (sy - topOffset) / baseHeight;
+
+      // Restrict coordinate projection to target document sheet boundaries
+      pctX = Math.max(0, Math.min(1, pctX));
+      pctY = Math.max(0, Math.min(1, pctY));
+
+      const xVal = pctX * w;
+      const yVal = pctY * h;
+
       setHoverCoords({ x: xVal, y: yVal });
     }
 
@@ -64,6 +165,31 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
     setActiveLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
   };
 
+  // Convert Base64 payload back to Blob URL securely to circumvent navigate safety limitations in browser frame sandbox environment
+  const handleOpenPdf = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!uploadedBase64) return;
+    try {
+      const arr = uploadedBase64.split(',');
+      const mime = arr[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      // Fallback
+      const newTab = window.open();
+      if (newTab) {
+        newTab.location.href = uploadedBase64;
+      }
+    }
+  };
+
   // Custom drawings for PLAN, SECTION A-A, ELEVATION views
   const renderBlueprintSVG = () => {
     switch (preset.id) {
@@ -71,16 +197,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         if (viewType === 'plan') {
           return (
             <svg className="w-full h-full text-[#0277BD]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-              {activeLayers.grid && (
-                <g strokeDasharray="4 4" stroke="#616161" strokeWidth="1" opacity="0.4">
-                  {Array.from({ length: 11 }).map((_, i) => (
-                    <line key={i} x1={i * 50} y1="0" x2={i * 50} y2="300" />
-                  ))}
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <line key={i} x1="0" y1={i * 50} x2="500" y2={i * 50} />
-                  ))}
-                </g>
-              )}
+              {renderGridOverlay(500, 300)}
               {activeLayers.concrete && (
                 <g strokeWidth="3" stroke="#3E2723">
                   {/* Outer foundation yard */}
@@ -130,13 +247,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         } else if (viewType === 'section') {
           return (
             <svg className="w-full h-full text-[#3E2723]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-              {activeLayers.grid && (
-                <g strokeDasharray="4 4" stroke="#616161" strokeWidth="1" opacity="0.4">
-                  {Array.from({ length: 11 }).map((_, i) => (
-                    <line key={i} x1={i * 50} y1="0" x2={i * 50} y2="300" />
-                  ))}
-                </g>
-              )}
+              {renderGridOverlay(500, 300)}
               {activeLayers.concrete && (
                 <g strokeWidth="3" stroke="#3E2723" fill="#E8E4C9">
                   {/* Soil surface sloped downward */}
@@ -172,13 +283,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         } else {
           return (
             <svg className="w-full h-full text-[#3E2723]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-              {activeLayers.grid && (
-                <g strokeDasharray="4 4" stroke="#616161" strokeWidth="1" opacity="0.4">
-                  {Array.from({ length: 11 }).map((_, i) => (
-                    <line key={i} x1={i * 50} y1="0" x2={i * 50} y2="300" />
-                  ))}
-                </g>
-              )}
+              {renderGridOverlay(500, 300)}
               {activeLayers.concrete && (
                 <g strokeWidth="3" stroke="#3E2723" fill="#E8E4C9">
                   {/* Clay outer walls */}
@@ -206,11 +311,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
       case 'harvesting_pond_perundurai':
         return (
           <svg className="w-full h-full text-[#388E3C]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-            {activeLayers.grid && (
-              <g strokeDasharray="3 3" stroke="#9E9E9E" strokeWidth="1" opacity="0.3">
-                <rect x="0" y="0" width="500" height="300" fill="none" />
-              </g>
-            )}
+            {renderGridOverlay(500, 300)}
             {activeLayers.concrete && (
               <g strokeWidth="3" stroke="#3E2723">
                 <rect x="60" y="40" width="380" height="220" fill="#E8E4C9" strokeWidth="4" />
@@ -230,11 +331,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
       case 'paddy_storage_godown_new':
         return (
           <svg className="w-full h-full text-[#3E2723]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-            {activeLayers.grid && (
-              <g strokeDasharray="3 3" stroke="#9E9E9E" strokeWidth="1" opacity="0.3">
-                <circle cx="250" cy="150" r="110" />
-              </g>
-            )}
+            {renderGridOverlay(500, 300)}
             {activeLayers.concrete && (
               <g strokeWidth="3" stroke="#3E2723">
                 <circle cx="250" cy="150" r="100" fill="#E8E4C9" />
@@ -254,11 +351,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
       case 'dry_granite_post_fencing_new':
         return (
           <svg className="w-full h-full text-[#388E3C]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-            {activeLayers.grid && (
-              <g strokeDasharray="3 3" stroke="#9E9E9E" strokeWidth="1" opacity="0.4">
-                <rect x="50" y="50" width="400" height="200" />
-              </g>
-            )}
+            {renderGridOverlay(500, 300)}
             {activeLayers.concrete && (
               <g strokeWidth="3" stroke="#5D4037">
                 {/* Boundary Line */}
@@ -296,41 +389,43 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b-2 border-[#3E2723] pb-3 mb-4 gap-2">
         <div>
           <span className="text-xs font-mono text-[#5D4037] uppercase tracking-wide font-bold">
-            {t.drawingViewerTitle} / {preset.location}
+            {uploadedBase64 ? '📁 CUSTOM UPLOADED SHEET' : `${t.drawingViewerTitle} / ${preset.location}`}
           </span>
           <h2 className="text-md sm:text-lg font-bold text-[#212121] uppercase mt-0.5" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
-            {preset.title}
+            {uploadedBase64 ? (uploadedFileName || 'CUSTOM_DESIGN.PDF') : preset.title}
           </h2>
         </div>
 
         {/* Floating Metrics HUD */}
         <div className="flex flex-wrap gap-2 font-mono text-xs">
           <div className="bg-[#9E9E9E] text-[#212121] px-2.5 py-1.5 border-2 border-[#3E2723] flex items-center gap-1.5 font-bold">
-            <span className="text-[#3E2723]">📏 {t.scaleLabel}:</span> {preset.scale}
+            <span className="text-[#3E2723]">📏 {t.scaleLabel}:</span> {uploadedBase64 ? '1:100' : preset.scale}
           </div>
           <div className="bg-[#9E9E9E] text-[#212121] px-2.5 py-1.5 border-2 border-[#3E2723] flex items-center gap-1.5 font-bold">
-            <span className="text-[#3E2723]">📐 {t.gridLabel}:</span> {preset.gridSize}
+            <span className="text-[#3E2723]">📐 {t.gridLabel}:</span> {uploadedBase64 ? 'VARIABLE' : preset.gridSize}
           </div>
         </div>
       </div>
 
       {/* Layer Views Buttons: PLAN | SECTION A-A | ELEVATION */}
-      <div className="flex gap-2 mb-3">
-        {(['plan', 'section', 'elevation'] as const).map((vt) => {
-          const isActive = viewType === vt;
-          return (
-            <button
-              key={vt}
-              onClick={() => setViewType(vt)}
-              className={`px-3 py-1 text-xs font-bold uppercase transition-transform scale-100 cursor-pointer border-2 border-[#3E2723] ${
-                isActive ? 'bg-[#5D4037] text-[#F9A825]' : 'bg-[#9E9E9E] text-[#212121]'
-              }`}
-            >
-              {vt === 'plan' ? 'PLAN' : vt === 'section' ? 'SECTION A-A' : 'ELEVATION'}
-            </button>
-          );
-        })}
-      </div>
+      {!uploadedBase64 && (
+        <div className="flex gap-2 mb-3">
+          {(['plan', 'section', 'elevation'] as const).map((vt) => {
+            const isActive = viewType === vt;
+            return (
+              <button
+                key={vt}
+                onClick={() => setViewType(vt)}
+                className={`px-3 py-1 text-xs font-bold uppercase transition-transform scale-100 cursor-pointer border-2 border-[#3E2723] ${
+                  isActive ? 'bg-[#5D4037] text-[#F9A825]' : 'bg-[#9E9E9E] text-[#212121]'
+                }`}
+              >
+                {vt === 'plan' ? 'PLAN' : vt === 'section' ? 'SECTION A-A' : 'ELEVATION'}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main Vector Slate Canvas with dynamic zoom scale and padding */}
       <div 
@@ -343,19 +438,40 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         style={{ backgroundImage: 'repeating-linear-gradient(rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px), repeating-linear-gradient(90deg, rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 50px)' }}
       >
         {/* SCALE RATIO DESTRUCT BEACON */}
-        <div className="absolute top-2 left-2 block text-2xs font-mono text-[#212121] bg-[#F9A825] p-1 border-2 border-[#3E2723] select-none font-bold">
-          X: {hoverCoords.x.toFixed(2)} M | Y: {hoverCoords.y.toFixed(2)} M
-        </div>
-        <div className="absolute top-2 right-2 hidden sm:block text-2xs font-mono text-[#388E3C] bg-[#E8E4C9] p-1 border border-[#3E2723] select-none font-bold">
-          ⚡ SYSTEM SCANNER LIVE [94%]
+        {!uploadedBase64 && (
+          <div className="absolute top-2 left-2 block text-[9px] font-mono text-[#212121] bg-[#F9A825] px-2 py-1 border-2 border-[#3E2723] select-none font-bold shadow-[1px_1px_0px_#3E2723]">
+            X: {hoverCoords.x.toFixed(2)} M | Y: {hoverCoords.y.toFixed(2)} M
+          </div>
+        )}
+        <div className="absolute top-2 right-2 hidden sm:block text-[9px] font-mono text-[#388E3C] bg-[#E8E4C9] p-1 border border-[#3E2723] select-none font-bold">
+          {uploadedBase64 ? '📊 CLOUD ANALYZER ONLINE' : '⚡ SYSTEM SCANNER LIVE [94%]'}
         </div>
 
-        <div 
-          className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none"
-          style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
-        >
-          {renderBlueprintSVG()}
-        </div>
+        {uploadedBase64 ? (
+          <div className="flex flex-col items-center justify-center p-6 text-center bg-[#E8E4C9] border-4 border-dashed border-[#5D4037]/60 shadow-[3px_3px_0px_#3E2723] max-w-sm pointer-events-auto">
+            <span className="text-3xl mb-2">📜</span>
+            <p className="font-mono text-xs font-bold text-[#3E2723] mb-3 uppercase tracking-wider">
+              Drawing preview rendering...
+            </p>
+            <button
+              onClick={handleOpenPdf}
+              className="px-3.5 py-2 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-colors border-2 border-[#3E2723] font-bold text-[9px] uppercase tracking-wide cursor-pointer shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5 active:shadow-[1px_1px_0px_#3E2723]"
+              style={{ fontFamily: "'Press Start 2P', sans-serif" }}
+            >
+              [View original PDF]
+            </button>
+            <p className="text-[9px] font-mono text-[#616161] mt-3 font-semibold break-all leading-relaxed">
+              Target Doc: {uploadedFileName || 'custom_document.pdf'}
+            </p>
+          </div>
+        ) : (
+          <div 
+            className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none"
+            style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
+          >
+            {renderBlueprintSVG()}
+          </div>
+        )}
       </div>
 
       {/* Layer HUD Toggles */}
@@ -366,36 +482,40 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
           </span>
           <button 
             type="button"
+            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('concrete')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              activeLayers.concrete ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.concrete ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             🧱 Concrete
           </button>
           <button 
             type="button"
+            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('steel')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              activeLayers.steel ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.steel ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             ⚙️ Steel
           </button>
           <button 
             type="button"
+            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('grid')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              activeLayers.grid ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.grid ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             🏁 Grid
           </button>
           <button 
             type="button"
+            disabled={!!uploadedBase64}
             onClick={() => toggleLayer('notes')}
             className={`px-2 py-1 text-xs font-mono font-bold border-2 border-[#3E2723] transition-all cursor-pointer ${
-              activeLayers.notes ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : activeLayers.notes ? 'bg-[#388E3C] text-white' : 'bg-[#9E9E9E] text-[#212121]'
             }`}
           >
             📝 Notes
@@ -403,34 +523,46 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading }: DrawingVi
         </div>
 
         {/* Zoom Controls & Main Action */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button 
             type="button"
             onClick={handleZoomOut}
-            className="p-1 px-2.5 bg-[#9E9E9E] text-[#212121] border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer"
+            disabled={!!uploadedBase64}
+            className={`px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] ${
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#9E9E9E] text-[#212121]'
+            }`}
+            style={{ fontFamily: "'Press Start 2P', sans-serif" }}
             title="Zoom Out"
           >
-            <ZoomOut size={16} />
+            -
           </button>
-          <span className="text-xs font-mono font-bold text-[#212121] min-w-[40px] text-center bg-[#E8E4C9] px-2 py-1 border-2 border-[#3E2723]">
+          <span className="text-[10px] font-mono font-bold text-[#212121] min-w-[48px] text-center bg-[#E8E4C9] px-2 py-1 border-2 border-[#3E2723] select-none" style={{ fontFamily: "'Press Start 2P', sans-serif" }}>
             {zoom}%
           </span>
           <button 
             type="button"
             onClick={handleZoomIn}
-            className="p-1 px-2.5 bg-[#9E9E9E] text-[#212121] border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer"
+            disabled={!!uploadedBase64}
+            className={`px-2.5 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer font-bold select-none text-[10px] ${
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#9E9E9E] text-[#212121]'
+            }`}
+            style={{ fontFamily: "'Press Start 2P', sans-serif" }}
             title="Zoom In"
           >
-            <ZoomIn size={16} />
+            +
           </button>
 
           <button
             type="button"
             onClick={handleReset}
-            className="p-1 px-2.5 bg-[#9E9E9E] text-[#212121] border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] hover:bg-[#616161] hover:text-white cursor-pointer"
-            title="Reset Pan/Zoom"
+            disabled={!!uploadedBase64}
+            className={`px-3 py-1.5 border-2 border-[#3E2723] active:translate-y-0.5 shadow-[2px_2px_0px_#3E2723] font-bold select-none text-[8px] uppercase tracking-wider ${
+              uploadedBase64 ? 'opacity-30 cursor-not-allowed bg-gray-300' : 'bg-[#388E3C] text-white hover:bg-[#2E7D32] cursor-pointer'
+            }`}
+            style={{ fontFamily: "'Press Start 2P', sans-serif" }}
+            title="Reset View and Pan"
           >
-            <Compass size={16} />
+            RESET VIEW
           </button>
         </div>
       </div>
