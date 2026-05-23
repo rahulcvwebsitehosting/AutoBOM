@@ -22,3 +22,9 @@ The farmer needed a BOQ to apply for a dairy development subsidy from the Tamil 
 - Screenshot of payment: [Available upon request]
 - Screenshot of generated BOQ: See main README
 - Date of generation: August 2026
+
+---
+
+## Contact
+- **Email:** [rahulcvfiitjee@gmail.com](mailto:rahulcvfiitjee@gmail.com)
+- **LinkedIn:** [https://www.linkedin.com/in/rahulshyamcivil/](https://www.linkedin.com/in/rahulshyamcivil/)

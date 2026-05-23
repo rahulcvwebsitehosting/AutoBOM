@@ -310,6 +310,6 @@ This software is licensed under the **MIT License**. You are welcome to modify, 
 
 - **Application Platform:** [https://autobomprj.vercel.app/](https://autobomprj.vercel.app/)
 - **Repository Link:** [https://github.com/rahulcvwebsitehosting/AutoBOM](https://github.com/rahulcvwebsitehosting/AutoBOM)
-- **Primary Email Address:** [rahulcvbackup@gmail.com](mailto:rahulcvbackup@gmail.com)
-- **LinkedIn Profile:** [linkedin.com/in/rahul-civil-ai](https://linkedin.com)
+- **Primary Email Address:** [rahulcvfiitjee@gmail.com](mailto:rahulcvfiitjee@gmail.com)
+- **LinkedIn Profile:** [linkedin.com/in/rahulshyamcivil](https://www.linkedin.com/in/rahulshyamcivil/)
 - **Devpost Submission:** Build with Gemini XPRIZE 2026
