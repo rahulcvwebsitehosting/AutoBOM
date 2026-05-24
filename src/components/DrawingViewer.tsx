@@ -34,6 +34,14 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
 
   // Dynamically parse physical grid size in meters as configured in the preset
   const parseGridSize = () => {
+    if (uploadedBase64) {
+      const slabEl = extractedElements?.find(e => e.category === 'concrete' && (e.description?.toLowerCase().includes('slab') || e.description?.toLowerCase().includes('floor') || e.description?.toLowerCase().includes('roof') || e.type?.toLowerCase().includes('slab')));
+      if (slabEl?.dimensions?.length_m && slabEl?.dimensions?.width_m) {
+        return { w: slabEl.dimensions.length_m, h: slabEl.dimensions.width_m };
+      }
+      return { w: 8.0, h: 5.0 }; // Default custom fallback
+    }
+
     try {
       const match = preset.gridSize.toLowerCase().match(/(\d+)\s*m\s*x\s*(\d+)\s*m/);
       if (match) {
@@ -125,9 +133,11 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
       const sx = px / zScale;
       const sy = py / zScale;
 
-      // Base dimension envelope of the SVG (constrained viewport scale matches 440m max width and 260m height)
-      const baseWidth = Math.min(rect.width - 32, 440);
-      const baseHeight = 260;
+      // Base dimension envelope of the SVG
+      const baseMaxWidth = uploadedBase64 ? 500 : 440;
+      const baseHeightVal = uploadedBase64 ? 300 : 260; // 300 height is on the div
+      const baseWidth = Math.min(rect.width - 32, baseMaxWidth);
+      const baseHeight = baseHeightVal;
 
       // Convert centered coordinates range back to standard grid coordinates (0..w and 0..h)
       const leftOffset = -baseWidth / 2;

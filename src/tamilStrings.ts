@@ -121,7 +121,7 @@ export const TAMIL_DICTIONARY: Record<'en' | 'ta', LanguageDictionary> = {
     cat_other: "Fencing / Other",
 
     summaryTitle: "BOM AGGREGATION CHEST SUMMARY",
-    totalEstimateValue: "Sub-Total Construction cost (Net Dry Materiel):",
+    totalEstimateValue: "Sub-Total Construction cost (Net Dry Material):",
     contractorMarginLabel: "Contractor Profit Margin Coverage (5%):",
     finalBOMValue: "Grand Estimated Field Total:",
     itemCountLabel: "Identified Parts count",

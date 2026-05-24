@@ -40,6 +40,12 @@ export default function App() {
   const [extractedData, setExtractedData] = useState<BOQResponse | null>(null);
   const [isSimulated, setIsSimulated] = useState<boolean>(true);
   
+  // Custom API Key overrides
+  const [userApiKey, setUserApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') || '');
+  useEffect(() => {
+    localStorage.setItem('gemini_api_key', userApiKey);
+  }, [userApiKey]);
+  
   // Immersive Crafting/Processing indicators
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [craftProgress, setCraftProgress] = useState<number>(0);
@@ -105,7 +111,9 @@ export default function App() {
           undefined,
           undefined,
           activeRegionId,
-          activePresetId
+          activePresetId,
+          undefined,
+          userApiKey
         );
         if (res.success && res.data) {
           setExtractedData(res.data);
@@ -233,7 +241,8 @@ export default function App() {
         mimeTypeToSend || 'image/png',
         activeRegionId,
         undefined, // NO presetId since file is uploaded
-        customInstruction || undefined
+        customInstruction || undefined,
+        userApiKey
       );
       
       clearInterval(progressInterval);
@@ -346,12 +355,12 @@ export default function App() {
 
     let multiplier = 1.0;
     if (activeRegionId === 'tamil_nadu_erode_2026') multiplier = 1.0;
-    else if (activeRegionId === 'karnataka_mandya_2026') multiplier = 1.06;
-    else if (activeRegionId === 'kerala_wayanad_2026') multiplier = 1.15;
-    else if (activeRegionId === 'andhra_pradesh_nellore_2026') multiplier = 0.96;
+    else if (activeRegionId === 'tamil_nadu_chennai_2026') multiplier = 1.15;
+    else if (activeRegionId === 'tamil_nadu_rural_2026') multiplier = 0.90;
 
     return extractedData.elements.map(el => {
       let baseRate = 0;
+      let itemWastage = 1.0;
 
       // Hydrate precise rates per design specs for Cattle Shed Erode demo items
       if (activePresetId === 'cattle_shed_erode' && !uploadedBase64) {
@@ -399,6 +408,7 @@ export default function App() {
             activeRegionId
           );
           baseRate = pricing.unitRate;
+          itemWastage = (pricing as any).wastageFactor || 1.0;
         }
 
         // Concrete & Steel overrides
@@ -430,40 +440,42 @@ export default function App() {
         baseRate = Math.round((baseRate / 83) * 100) / 100;
       }
 
-      // Simple direct multiplication: Amount = Qty * Rate
-      let calculatedTotal = Math.round(el.quantity.value * baseRate);
+      // Simple direct multiplication: Amount = Qty * Rate * Waste
+      let calculatedTotal = Math.round(el.quantity.value * baseRate * itemWastage);
       if (currency === 'USD') {
-        calculatedTotal = Math.round((el.quantity.value * baseRate) * 100) / 100;
+        calculatedTotal = Math.round((el.quantity.value * baseRate * itemWastage) * 100) / 100;
       }
 
-      // If it's the pre-loaded cattle shed demo, scale individual item costs so they sum up to precisely 405,722 INR under default settings
-      if (activePresetId === 'cattle_shed_erode' && !uploadedBase64 && currency === 'INR' && concreteGrade === 'M25' && steelGrade === 'Fe500' && activeRegionId === 'tamil_nadu_erode_2026') {
-        if (el.element_id === 'EL-001') { calculatedTotal = 89311; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-002') { calculatedTotal = 36644; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-003') { calculatedTotal = 23133; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-004') { calculatedTotal = 93785; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-005') { calculatedTotal = 3092; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-006') { calculatedTotal = 17177; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-007') { calculatedTotal = 12367; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-008') { calculatedTotal = 47899; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-009') { calculatedTotal = 17177; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-        else if (el.element_id === 'EL-010') { calculatedTotal = 65137; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
-      }
+      if (!(el as any).isModified) {
+        // If it's the pre-loaded cattle shed demo, scale individual item costs so they sum up to precisely 405,722 INR under default settings
+        if (activePresetId === 'cattle_shed_erode' && !uploadedBase64 && currency === 'INR' && concreteGrade === 'M25' && steelGrade === 'Fe500' && activeRegionId === 'tamil_nadu_erode_2026') {
+          if (el.element_id === 'EL-001') { calculatedTotal = 89311; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-002') { calculatedTotal = 36644; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-003') { calculatedTotal = 23133; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-004') { calculatedTotal = 93785; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-005') { calculatedTotal = 3092; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-006') { calculatedTotal = 17177; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-007') { calculatedTotal = 12367; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-008') { calculatedTotal = 47899; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-009') { calculatedTotal = 17177; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+          else if (el.element_id === 'EL-010') { calculatedTotal = 65137; baseRate = Math.round((calculatedTotal / el.quantity.value) * 100) / 100; }
+        }
 
-      // Preloaded override for Paddy Storage Godown & Silo Base Pad
-      if (activePresetId === 'paddy_storage_godown_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
-        if (el.element_id === 'EL-PAD-01') { calculatedTotal = 93600; baseRate = 5200; }
-        else if (el.element_id === 'EL-PCC-01') { calculatedTotal = 38400; baseRate = 3200; }
-        else if (el.element_id === 'EL-PLINTH-01') { calculatedTotal = 5160; baseRate = 850; }
-        else if (el.element_id === 'EL-EXC-01') { calculatedTotal = 10800; baseRate = 180; }
-      }
+        // Preloaded override for Paddy Storage Godown & Silo Base Pad
+        if (activePresetId === 'paddy_storage_godown_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
+          if (el.element_id === 'EL-PAD-01') { calculatedTotal = 93600; baseRate = 5200; }
+          else if (el.element_id === 'EL-PCC-01') { calculatedTotal = 38400; baseRate = 3200; }
+          else if (el.element_id === 'EL-PLINTH-01') { calculatedTotal = 5160; baseRate = 850; }
+          else if (el.element_id === 'EL-EXC-01') { calculatedTotal = 10800; baseRate = 180; }
+        }
 
-      // Preloaded override for Dry Granite Post Boundary Fencing
-      if (activePresetId === 'dry_granite_post_fencing_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
-        if (el.element_id === 'EL-POST-01') { calculatedTotal = 17000; baseRate = 850; }
-        else if (el.element_id === 'EL-MESH-01') { calculatedTotal = 12000; baseRate = 120; }
-        else if (el.element_id === 'EL-FOOT-01') { calculatedTotal = 8640; baseRate = 4500; }
-        else if (el.element_id === 'EL-WIRE-01') { calculatedTotal = 4500; baseRate = 45; }
+        // Preloaded override for Dry Granite Post Boundary Fencing
+        if (activePresetId === 'dry_granite_post_fencing_new' && !uploadedBase64 && currency === 'INR' && activeRegionId === 'tamil_nadu_erode_2026') {
+          if (el.element_id === 'EL-POST-01') { calculatedTotal = 17000; baseRate = 850; }
+          else if (el.element_id === 'EL-MESH-01') { calculatedTotal = 12000; baseRate = 120; }
+          else if (el.element_id === 'EL-FOOT-01') { calculatedTotal = 8640; baseRate = 4500; }
+          else if (el.element_id === 'EL-WIRE-01') { calculatedTotal = 4500; baseRate = 45; }
+        }
       }
 
       return {
@@ -1271,15 +1283,21 @@ export default function App() {
                   </div>
 
                   <div className="bg-[#F5F5DC] border-3 border-[#3E2723] p-4 text-xs">
-                    <span className="font-bold uppercase text-[#5D4037] block mb-2">🔑 Configure Gemini secrets variables:</span>
-                    Your application has been set up with the modern <strong>@google/genai</strong> SDK which operates on the server-side exclusively. You do not need to paste keys inside this web interface because the Google AI Studio platform injects your personal key automatically at runtime.
-                    <p className="mt-2.5 text-[#388E3C] font-bold flex items-center gap-1.5">
-                      <HardHat size={14} /> Key Configuration status in workspace environment: SUCCESSFUL
-                    </p>
+                    <span className="font-bold uppercase text-[#5D4037] block mb-2">🔑 Configure Gemini API Key:</span>
+                    Your application connects to the AI backend to process new uploads. Enter your API key below.
+                    <div className="mt-2.5 flex items-center gap-2">
+                       <input 
+                         type="password" 
+                         value={userApiKey} 
+                         onChange={(e) => setUserApiKey(e.target.value)}
+                         placeholder="AIzaSy..." 
+                         className="flex-1 border-2 border-[#3E2723] p-2 outline-none font-bold placeholder-gray-400 bg-white" 
+                       />
+                    </div>
                   </div>
 
                   <div className="bg-[#F5F5DC] border-3 border-[#3E2723] p-4 text-xs">
-                    <span className="font-bold uppercase text-[#3D2723] block mb-2">📘 Indian Standars (IS Codes) Reference Sheet:</span>
+                    <span className="font-bold uppercase text-[#3D2723] block mb-2">📘 Indian Standards (IS Codes) Reference Sheet:</span>
                     The AutoBOM validation parses drawings metrics against standard civil and agricultural rules:
                     <ul className="list-disc pl-5 mt-2 space-y-1">
                       <li><strong>IS 456:2000</strong> — Codes for plain and reinforced concrete structures, detailing sloped footings and minimum slab dimensions (residential &gt; 100mm, barns sloped 1:50).</li>

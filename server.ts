@@ -28,7 +28,7 @@ async function startServer() {
   app.post(["/api/extract", "/api/extract-bom"], async (req, res) => {
     try {
       const { imageBase64, mimeType, regionId, presetId, customPromptInput } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = req.headers['x-gemini-key'] || req.body.apiKey || process.env.GEMINI_API_KEY;
 
       const activeRegionId = regionId || "tamil_nadu_erode_2026";
 
@@ -103,14 +103,14 @@ MANDATORY EXTRACTION RULES:
 11. Round all dimensions to 2 decimal places. Round quantities to 3 decimal places.
 12. Be 100% deterministic — same drawing must always produce identical output.
 EXAMPLE correct output for a 8m×5m farm storage with 4 columns, 1 door (1.2m), 1 window (1.5m):
-- EL-001 concrete slab: 8.0×5.0×0.12 = 4.800 m³
-- EL-002 PCC bed: 8.0×5.0×0.075 = 3.000 m³  
-- EL-003 masonry walls: (2×(8.0+5.0)×3.0 - 1.2×2.1 - 1.5×1.2) × 0.23 = (78.0-2.52-1.80)×0.23 = 16.956 m³
-- EL-004 RCC columns: 4×0.3×0.3×3.0 = 1.080 m³
-- EL-005 steel reinforcement: (4.800×80)+(1.080×120) = 384+129.6 = 513.600 kg
-- EL-006 excavation: 4×1.0×1.0×0.6 = 2.400 m³
-- EL-007 door D-1: 1 nos (1.2m×2.1m)
-- EL-008 window W-1: 1 nos (1.5m×1.2m)
+- EL-001 concrete slab: 8.00x5.00x0.12 = 4.800 m³
+- EL-002 PCC bed: 8.00x5.00x0.075 = 3.000 m³  
+- EL-003 masonry walls: ((2×(8.0+5.0)-4×0.60)×3.0 - 1.2×2.1 - 1.5×1.2) × 0.23 = 15.290 m³
+- EL-004 RCC columns: 4×0.30×0.30×3.00 = 1.080 m³
+- EL-005 steel reinforcement: (4.800×80)+(1.080×120) = 513.600 kg
+- EL-006 excavation: 4×1.00×1.00×0.60 = 2.400 m³
+- EL-007 door D-1: 1.00 nos (1.2m×2.1m)
+- EL-008 window W-1: 1.00 nos (1.5m×1.2m)
 OUTPUT SCHEMA: Strict JSON only, no markdown, single line:
 {
   "project_info": { "drawing_title": "string", "drawing_number": "string", "scale": "string", "sheet_number": "string", "date": "string", "confidence": 0.0 },
@@ -275,7 +275,7 @@ OUTPUT SCHEMA: Strict JSON only, no markdown, single line:
 
     } catch (err: any) {
       console.error("Critical extraction error:", err);
-      res.status(500).json({ success: false, error: err.message || "Internal Extraction Failure" });
+      res.status(500).json({ success: false, error: "An error occurred during extraction. Please check your API key or input and try again." });
     }
   });
 

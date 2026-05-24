@@ -4,17 +4,22 @@ export async function extractBOQ(
   mimeType: string = 'image/png',
   regionId?: string,
   presetId?: string,
-  customPromptInput?: string
+  customPromptInput?: string,
+  apiKey?: string
 ) {
   const response = await fetch('/api/extract', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...(apiKey ? { 'x-gemini-key': apiKey } : {})
+    },
     body: JSON.stringify({
       imageBase64,
       mimeType,
       regionId,
       presetId,
-      customPromptInput
+      customPromptInput,
+      apiKey
     }),
   });
 

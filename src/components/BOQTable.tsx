@@ -36,6 +36,10 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
   }, [isTouchDevice]);
 
   const getTooltipText = (el: BOQElement) => {
+    if (el.calculation_notes) {
+      return `Calculation: ${el.calculation_notes}`;
+    }
+
     const idLower = (el.element_id || '').toLowerCase();
     const descLower = (el.description || '').toLowerCase();
     const typeLower = (el.type || '').toLowerCase();
@@ -127,7 +131,8 @@ export function BOQTable({ elements, t, regionId, onUpdateElements, contractorMa
           quantity: { ...el.quantity, value: editingQty },
           unit_rate: editingRate,
           total_cost: totalCost,
-          calculation_notes: `${editingQty} * ${editingRate}`
+          calculation_notes: `${editingQty} * ${editingRate}`,
+          isModified: true
         };
       }
       return el;
