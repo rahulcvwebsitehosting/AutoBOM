@@ -1081,6 +1081,7 @@ export default function App() {
                 uploadedBase64={uploadedBase64}
                 uploadedFileName={uploadedFileName}
                 uploadedMimeType={uploadedMimeType}
+                extractedElements={extractedData?.elements || []}
               />
             )}
 

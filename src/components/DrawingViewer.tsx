@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { PresetDrawing } from '../presets';
 import { Layers, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { LanguageDictionary } from '../tamilStrings';
+import { BOQElement } from '../types';
 
 interface DrawingViewerProps {
   preset: PresetDrawing;
@@ -11,9 +12,10 @@ interface DrawingViewerProps {
   uploadedBase64?: string | null;
   uploadedFileName?: string | null;
   uploadedMimeType?: string | null;
+  extractedElements?: BOQElement[];
 }
 
-export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBase64, uploadedFileName, uploadedMimeType }: DrawingViewerProps) {
+export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBase64, uploadedFileName, uploadedMimeType, extractedElements }: DrawingViewerProps) {
   const [zoom, setZoom] = useState<number>(100);
   const [activeLayers, setActiveLayers] = useState({
     concrete: true,
@@ -384,6 +386,113 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
     }
   };
 
+  const renderUploadedStructuralView = () => {
+    const elements = extractedElements || [];
+    if (elements.length === 0) {
+      return (
+        <svg className="w-full h-full" viewBox="0 0 500 300" fill="none">
+          <rect x="0" y="0" width="500" height="300" fill="#E8E4C9"/>
+          <text x="250" y="150" textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="13" fontWeight="bold">
+            NO ELEMENTS EXTRACTED — UPLOAD A VALID DRAWING
+          </text>
+        </svg>
+      );
+    }
+    // Category color map matching the app theme
+    const catColor: Record<string, { fill: string; stroke: string; label: string }> = {
+      concrete:   { fill: '#D7CCC8', stroke: '#3E2723', label: 'RCC/PCC' },
+      steel:      { fill: '#B0BEC5', stroke: '#546E7A', label: 'STEEL' },
+      masonry:    { fill: '#FFE082', stroke: '#F9A825', label: 'MASONRY' },
+      excavation: { fill: '#A5D6A7', stroke: '#388E3C', label: 'EXCAVATION' },
+      finish:     { fill: '#81D4FA', stroke: '#0277BD', label: 'FINISH' },
+      wood:       { fill: '#FFCC80', stroke: '#E65100', label: 'WOOD' },
+      plumbing:   { fill: '#80CBC4', stroke: '#00695C', label: 'PLUMBING' },
+      electrical: { fill: '#CE93D8', stroke: '#6A1B9A', label: 'ELECTRICAL' },
+      other:      { fill: '#F5F5DC', stroke: '#9E9E9E', label: 'OTHER' },
+    };
+    // Layout: place elements as stacked horizontal blocks, row-by-row
+    const COLS = 4;
+    const cellW = 110;
+    const cellH = 60;
+    const padX = 10;
+    const padY = 10;
+    const totalW = COLS * cellW + padX * 2;
+    const rows = Math.ceil(elements.length / COLS);
+    const totalH = rows * cellH + padY * 2 + 30;
+    return (
+      <svg
+        className="w-full h-full"
+        viewBox={`0 0 ${totalW} ${totalH}`}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Background */}
+        <rect width={totalW} height={totalH} fill="#F5F5DC"/>
+        {/* Grid lines */}
+        {Array.from({ length: COLS + 1 }).map((_, i) => (
+          <line key={`gv${i}`} x1={padX + i * cellW} y1={padY + 20} x2={padX + i * cellW} y2={totalH - padY}
+            stroke="#D7CCC8" strokeWidth="0.5"/>
+        ))}
+        {Array.from({ length: rows + 1 }).map((_, i) => (
+          <line key={`gh${i}`} x1={padX} y1={padY + 20 + i * cellH} x2={totalW - padX} y2={padY + 20 + i * cellH}
+            stroke="#D7CCC8" strokeWidth="0.5"/>
+        ))}
+        {/* Title bar */}
+        <rect x={0} y={0} width={totalW} height={24} fill="#3E2723"/>
+        <text x={totalW / 2} y={16} textAnchor="middle" fill="#F9A825"
+          fontFamily="monospace" fontSize="10" fontWeight="bold">
+          STRUCTURAL ELEMENT MAP — {elements.length} ELEMENTS IDENTIFIED
+        </text>
+        {/* Element blocks */}
+        {elements.map((el, idx) => {
+          const col = idx % COLS;
+          const row = Math.floor(idx / COLS);
+          const x = padX + col * cellW + 3;
+          const y = padY + 20 + row * cellH + 3;
+          const w = cellW - 6;
+          const h = cellH - 6;
+          const theme = catColor[el.category] || catColor['other'];
+          const labelText = el.description.length > 22
+            ? el.description.substring(0, 20) + '…'
+            : el.description;
+          const qtyText = `${el.quantity.value.toFixed(2)} ${el.quantity.unit}`;
+          // Draw size bar proportional to quantity (capped at 90% of cell width)
+          const maxQty = Math.max(...elements.map(e => e.quantity.value), 1);
+          const barW = Math.max(4, Math.min(w - 4, ((el.quantity.value / maxQty) * (w - 8))));
+          return (
+            <g key={el.element_id}>
+              {/* Cell background */}
+              <rect x={x} y={y} width={w} height={h} fill={theme.fill} stroke={theme.stroke} strokeWidth="1.5"/>
+              {/* Category label pill */}
+              <rect x={x + 2} y={y + 2} width={42} height={11} fill={theme.stroke} rx="1"/>
+              <text x={x + 4} y={y + 11} fill="#FFFFFF" fontFamily="monospace" fontSize="7" fontWeight="bold">
+                {theme.label}
+              </text>
+              {/* Confidence dot */}
+              <circle cx={x + w - 6} cy={y + 7} r="4"
+                fill={el.confidence >= 0.8 ? '#388E3C' : el.confidence >= 0.5 ? '#F9A825' : '#D84315'}/>
+              {/* Description text */}
+              <text x={x + 4} y={y + 26} fill="#212121" fontFamily="monospace" fontSize="7.5" fontWeight="bold">
+                {labelText}
+              </text>
+              {/* ID */}
+              <text x={x + 4} y={y + 36} fill="#5D4037" fontFamily="monospace" fontSize="6.5">
+                {el.element_id}
+              </text>
+              {/* Quantity bar */}
+              <rect x={x + 4} y={y + h - 14} width={w - 8} height={6} fill="#E8E4C9" stroke={theme.stroke} strokeWidth="0.5"/>
+              <rect x={x + 4} y={y + h - 14} width={barW} height={6} fill={theme.stroke} opacity="0.7"/>
+              {/* Quantity text */}
+              <text x={x + 4} y={y + h - 2} fill="#3E2723" fontFamily="monospace" fontSize="6.5" fontWeight="bold">
+                {qtyText}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
   return (
     <div className="w-full bg-[#E8E4C9] border-4 border-[#3E2723] shadow-[4px_4px_0px_#3E2723] p-4 flex flex-col mb-6">
       {/* HUD Header */}
@@ -446,40 +555,21 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
           {uploadedBase64 ? '📊 CLOUD ANALYZER ONLINE' : '⚡ SYSTEM SCANNER LIVE [94%]'}
         </div>
 
-        <div 
-          className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none animate-fade-in"
-          style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
-        >
-          {uploadedBase64 ? (
-            <div className="relative w-full h-full flex items-center justify-center">
-              <img 
-                src={uploadedBase64} 
-                alt="Uploaded Sheet" 
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-              />
-              {activeLayers.grid && (
-                <div className="absolute inset-0 pointer-events-none">
-                  <svg className="w-full h-full text-[#0277BD]" viewBox="0 0 500 300" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    {renderGridOverlay(500, 300)}
-                  </svg>
-                </div>
-              )}
-              {!uploadedMimeType?.startsWith('image/') && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-auto bg-black/15">
-                  <button
-                    onClick={handleOpenPdf}
-                    className="px-3 py-1.5 bg-[#388E3C] text-white hover:bg-[#2E7D32] transition-colors border-2 border-[#3E2723] font-bold text-[8px] uppercase tracking-wide cursor-pointer shadow-[2px_2px_0px_#3E2723] active:translate-y-0.5"
-                    style={{ fontFamily: "'Press Start 2P', sans-serif" }}
-                  >
-                    [Open PDF in new tab]
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            renderBlueprintSVG()
-          )}
-        </div>
+        {uploadedBase64 ? (
+          <div
+            className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none"
+            style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '500px', height: '300px' }}
+          >
+            {renderUploadedStructuralView()}
+          </div>
+        ) : (
+          <div 
+            className="transition-transform duration-75 ease-out flex items-center justify-center pointer-events-none"
+            style={{ transform: `scale(${zoom / 100}) translate(${pan.x / (zoom/100)}px, ${pan.y / (zoom/100)}px)`, width: '100%', maxWidth: '440px', height: '260px' }}
+          >
+            {renderBlueprintSVG()}
+          </div>
+        )}
       </div>
 
       {/* Layer HUD Toggles */}
