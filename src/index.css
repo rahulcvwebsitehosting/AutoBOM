@@ -5,6 +5,16 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-pixel: "VT323", monospace;
   --font-press: "Press Start 2P", monospace;
+  --text-2xs: 0.625rem;
+  --text-3xs: 0.5rem;
+}
+
+@utility text-2xs {
+  font-size: var(--text-2xs);
+}
+
+@utility text-3xs {
+  font-size: var(--text-3xs);
 }
 
 /* Custom 3D Minecraft aesthetic parameters */

@@ -10,7 +10,7 @@ import { extractBOQ } from './services/geminiService';
 import { 
   FileText, Map, HelpCircle, HardHat, 
   Search, Scroll, Compass, Sparkles, Languages, Settings,
-  AlertOctagon, CheckSquare, BarChart3, ChevronRight, RefreshCw, Upload, FileSignature
+  AlertOctagon, Upload
 } from 'lucide-react';
 
 export default function App() {
@@ -54,7 +54,7 @@ export default function App() {
   const [uploadDurationExceeded, setUploadDurationExceeded] = useState<boolean>(false);
   const [hasAutoRetried, setHasAutoRetried] = useState<boolean>(false);
 
-  const timerRef = React.useRef<number | null>(null);
+  const timerRef = React.useRef<ReturnType<typeof window.setInterval> | null>(null);
 
   // Monitor upload/extraction duration dynamically
   useEffect(() => {
@@ -85,7 +85,7 @@ export default function App() {
     }
     
     return () => {
-      if (timerRef.current !== null) {
+      if (timerRef.current) {
         window.clearInterval(timerRef.current);
         timerRef.current = null;
       }
@@ -995,10 +995,13 @@ export default function App() {
             </div>
           )}
 
-          {/* HOTBAR NAVIGATION: 9 grid slots */}
-          <div className="grid grid-cols-5 md:grid-cols-9 gap-1.5 select-none" role="tablist">
+          {/* HOTBAR CONTAINER */}
+          <div className="w-full grid md:grid-cols-9 gap-1.5">
             
-            {/* Slot 1: Review/Draw Tab */}
+            {/* HOTBAR NAVIGATION: 5 active slots */}
+            <div className="col-span-9 md:col-span-5 grid grid-cols-3 md:grid-cols-5 gap-1.5 select-none" role="tablist">
+              
+              {/* Slot 1: Review/Draw Tab */}
             <button
               onClick={() => setActiveTab('review')}
               className={`p-2 border-3 text-center transition-all cursor-pointer relative active:translate-y-px ${
@@ -1063,23 +1066,28 @@ export default function App() {
               <span className="block text-3xs font-mono font-bold mt-1 uppercase line-clamp-1">Settings</span>
             </button>
 
+            </div>
+
             {/* Slot 6 to 9: Minecraft Grid placeholders (Disabled styled buttons) */}
-            <div className="hidden md:flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center select-none">
-              <span className="text-2xs opacity-40">🌾</span>
-              <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Farm slot</span>
+            <div className="hidden md:grid col-span-4 grid-cols-4 gap-1.5 select-none">
+              <div className="flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center">
+                <span className="text-2xs opacity-40">🌾</span>
+                <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Farm slot</span>
+              </div>
+              <div className="flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center">
+                <span className="text-2xs opacity-40">🧱</span>
+                <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Brick slot</span>
+              </div>
+              <div className="flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center">
+                <span className="text-2xs opacity-40">⚙️</span>
+                <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Steel slot</span>
+              </div>
+              <div className="flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center">
+                <span className="text-2xs opacity-40">⛏️</span>
+                <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Soil slot</span>
+              </div>
             </div>
-            <div className="hidden md:flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center select-none">
-              <span className="text-2xs opacity-40">🧱</span>
-              <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Brick slot</span>
-            </div>
-            <div className="hidden md:flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center select-none">
-              <span className="text-2xs opacity-40">⚙️</span>
-              <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Steel slot</span>
-            </div>
-            <div className="hidden md:flex p-2 border-3 border-dashed border-[#5D4037]/40 bg-[#E8E4C9]/40 text-[#616161] flex-col items-center justify-center select-none">
-              <span className="text-2xs opacity-40">⛏️</span>
-              <span className="text-3xs font-mono opacity-30 mt-1 line-clamp-1">Soil slot</span>
-            </div>
+
           </div>
 
           {/* DYNAMIC VIEWPORT RENDER CONTAINER */}
