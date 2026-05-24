@@ -390,105 +390,213 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
     const elements = extractedElements || [];
     if (elements.length === 0) {
       return (
-        <svg className="w-full h-full" viewBox="0 0 500 300" fill="none">
-          <rect x="0" y="0" width="500" height="300" fill="#E8E4C9"/>
-          <text x="250" y="150" textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="13" fontWeight="bold">
-            NO ELEMENTS EXTRACTED — UPLOAD A VALID DRAWING
+        <svg className="w-full h-full" viewBox="0 0 500 320" fill="none">
+          <rect width="500" height="320" fill="#E8E4C9"/>
+          <text x="250" y="160" textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="13" fontWeight="bold">
+            NO ELEMENTS EXTRACTED — RUN AI ANALYSIS FIRST
           </text>
         </svg>
       );
     }
-    // Category color map matching the app theme
-    const catColor: Record<string, { fill: string; stroke: string; label: string }> = {
-      concrete:   { fill: '#D7CCC8', stroke: '#3E2723', label: 'RCC/PCC' },
-      steel:      { fill: '#B0BEC5', stroke: '#546E7A', label: 'STEEL' },
-      masonry:    { fill: '#FFE082', stroke: '#F9A825', label: 'MASONRY' },
-      excavation: { fill: '#A5D6A7', stroke: '#388E3C', label: 'EXCAVATION' },
-      finish:     { fill: '#81D4FA', stroke: '#0277BD', label: 'FINISH' },
-      wood:       { fill: '#FFCC80', stroke: '#E65100', label: 'WOOD' },
-      plumbing:   { fill: '#80CBC4', stroke: '#00695C', label: 'PLUMBING' },
-      electrical: { fill: '#CE93D8', stroke: '#6A1B9A', label: 'ELECTRICAL' },
-      other:      { fill: '#F5F5DC', stroke: '#9E9E9E', label: 'OTHER' },
-    };
-    // Layout: place elements as stacked horizontal blocks, row-by-row
-    const COLS = 4;
-    const cellW = 110;
-    const cellH = 60;
-    const padX = 10;
-    const padY = 10;
-    const totalW = COLS * cellW + padX * 2;
-    const rows = Math.ceil(elements.length / COLS);
-    const totalH = rows * cellH + padY * 2 + 30;
+    // ── Step 1: Find building footprint from concrete slab element ──
+    const slabEl = elements.find(e =>
+      e.category === 'concrete' &&
+      (e.description?.toLowerCase().includes('slab') ||
+       e.description?.toLowerCase().includes('floor') ||
+       e.description?.toLowerCase().includes('roof') ||
+       e.type?.toLowerCase().includes('slab'))
+    );
+    const rawL = slabEl?.dimensions?.length_m ?? 8.0;
+    const rawW = slabEl?.dimensions?.width_m ?? 5.0;
+    // ── Step 2: Fixed SVG canvas, scale building to fit ──
+    const SVG_W = 500;
+    const SVG_H = 320;
+    const MARGIN = 60; // space for dimension lines and labels
+    const scaleX = (SVG_W - MARGIN * 2) / rawL;
+    const scaleY = (SVG_H - MARGIN * 2) / rawW;
+    const sc = Math.min(scaleX, scaleY);
+    const bldW = rawL * sc;   // building width in SVG px
+    const bldH = rawW * sc;   // building height in SVG px
+    const ox = (SVG_W - bldW) / 2;  // origin x
+    const oy = (SVG_H - bldH) / 2;  // origin y
+    // ── Step 3: Detect wall thickness ──
+    const wallEl = elements.find(e => e.category === 'masonry');
+    const wtMm = wallEl?.dimensions?.thickness_mm ?? 230;
+    const wt = (wtMm / 1000) * sc; // wall thickness in SVG px
+    // ── Step 4: Detect columns ──
+    const colEls = elements.filter(e =>
+      e.category === 'concrete' &&
+      (e.description?.toLowerCase().includes('column') ||
+       e.description?.toLowerCase().includes('col') ||
+       e.type?.toLowerCase().includes('column'))
+    );
+    const colSizeMm = colEls[0]?.dimensions?.thickness_mm ?? 300;
+    const colSize = (colSizeMm / 1000) * sc;
+    // ── Step 5: Detect door ──
+    const doorEl = elements.find(e =>
+      e.category === 'other' &&
+      (e.description?.toLowerCase().includes('door') ||
+       e.element_id?.toLowerCase().includes('door') ||
+       e.element_id?.toLowerCase().includes('d-'))
+    );
+    const doorWm = doorEl?.dimensions?.width_m ?? 1.2;
+    const doorW = doorWm * sc;
+    // ── Step 6: Detect window ──
+    const winEl = elements.find(e =>
+      e.category === 'other' &&
+      (e.description?.toLowerCase().includes('window') ||
+       e.element_id?.toLowerCase().includes('win') ||
+       e.element_id?.toLowerCase().includes('w-'))
+    );
+    const winWm = winEl?.dimensions?.width_m ?? 1.5;
+    const winW = winWm * sc;
+    // ── Step 7: Detect steel elements ──
+    const steelEl = elements.find(e => e.category === 'steel');
+    const hasSteel = !!steelEl;
+    // ── Derived positions ──
+    const colPositions = [
+      { cx: ox + wt / 2, cy: oy + wt / 2 },                      // top-left
+      { cx: ox + bldW - wt / 2, cy: oy + wt / 2 },               // top-right
+      { cx: ox + wt / 2, cy: oy + bldH - wt / 2 },               // bottom-left
+      { cx: ox + bldW - wt / 2, cy: oy + bldH - wt / 2 },        // bottom-right
+    ];
+    // Door: centered on bottom wall
+    const doorX = ox + bldW / 2 - doorW / 2;
+    const doorY = oy + bldH - wt;
+    // Window: centered on right wall
+    const winY = oy + bldH / 2 - winW / 2;
+    const winX = ox + bldW - wt;
+    // Interior dimensions for label
+    const interiorL = rawL - 0.46;  // 2 × 230mm walls
+    const interiorW = rawW - 0.46;
     return (
-      <svg
-        className="w-full h-full"
-        viewBox={`0 0 ${totalW} ${totalH}`}
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <svg className="w-full h-full" viewBox={`0 0 ${SVG_W} ${SVG_H}`} fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Background */}
-        <rect width={totalW} height={totalH} fill="#F5F5DC"/>
-        {/* Grid lines */}
-        {Array.from({ length: COLS + 1 }).map((_, i) => (
-          <line key={`gv${i}`} x1={padX + i * cellW} y1={padY + 20} x2={padX + i * cellW} y2={totalH - padY}
-            stroke="#D7CCC8" strokeWidth="0.5"/>
+        <rect width={SVG_W} height={SVG_H} fill="#F5F5DC"/>
+        {/* Grid (1m cells) */}
+        {Array.from({ length: Math.ceil(rawL) + 1 }).map((_, i) => (
+          <line key={`gv${i}`}
+            x1={ox + i * sc} y1={oy} x2={ox + i * sc} y2={oy + bldH}
+            stroke="#D7CCC8" strokeWidth="0.5" opacity="0.6"/>
         ))}
-        {Array.from({ length: rows + 1 }).map((_, i) => (
-          <line key={`gh${i}`} x1={padX} y1={padY + 20 + i * cellH} x2={totalW - padX} y2={padY + 20 + i * cellH}
-            stroke="#D7CCC8" strokeWidth="0.5"/>
+        {Array.from({ length: Math.ceil(rawW) + 1 }).map((_, i) => (
+          <line key={`gh${i}`}
+            x1={ox} y1={oy + i * sc} x2={ox + bldW} y2={oy + i * sc}
+            stroke="#D7CCC8" strokeWidth="0.5" opacity="0.6"/>
         ))}
-        {/* Title bar */}
-        <rect x={0} y={0} width={totalW} height={24} fill="#3E2723"/>
-        <text x={totalW / 2} y={16} textAnchor="middle" fill="#F9A825"
-          fontFamily="monospace" fontSize="10" fontWeight="bold">
-          STRUCTURAL ELEMENT MAP — {elements.length} ELEMENTS IDENTIFIED
+        {/* ── SLAB FILL (interior floor) ── */}
+        <rect
+          x={ox + wt} y={oy + wt}
+          width={bldW - wt * 2} height={bldH - wt * 2}
+          fill="#EDE8C0" stroke="none"
+        />
+        {/* ── WALLS (outer rectangle minus openings) ── */}
+        {/* Top wall */}
+        <rect x={ox} y={oy} width={bldW} height={wt} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        {/* Left wall */}
+        <rect x={ox} y={oy} width={wt} height={bldH} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        {/* Right wall with window gap */}
+        <rect x={winX} y={oy} width={wt} height={winY - oy} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        <rect x={winX} y={winY + winW} width={wt} height={oy + bldH - (winY + winW)} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        {/* Bottom wall with door gap */}
+        <rect x={ox} y={oy + bldH - wt} width={doorX - ox} height={wt} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        <rect x={doorX + doorW} y={oy + bldH - wt} width={ox + bldW - (doorX + doorW)} height={wt} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
+        {/* ── COLUMNS (4 corners, cross-hatched grey) ── */}
+        {colPositions.map((pos, i) => (
+          <g key={`col${i}`}>
+            <rect
+              x={pos.cx - colSize / 2} y={pos.cy - colSize / 2}
+              width={colSize} height={colSize}
+              fill="#9E9E9E" stroke="#3E2723" strokeWidth="1.5"
+            />
+            {/* Cross hatch for column */}
+            <line x1={pos.cx - colSize/2} y1={pos.cy - colSize/2} x2={pos.cx + colSize/2} y2={pos.cy + colSize/2} stroke="#5D4037" strokeWidth="0.8"/>
+            <line x1={pos.cx + colSize/2} y1={pos.cy - colSize/2} x2={pos.cx - colSize/2} y2={pos.cy + colSize/2} stroke="#5D4037" strokeWidth="0.8"/>
+            <text x={pos.cx} y={pos.cy + 2} textAnchor="middle" fill="#FFFFFF" fontFamily="monospace" fontSize="7" fontWeight="bold">C</text>
+          </g>
+        ))}
+        {/* ── DOOR (swing arc + gap) ── */}
+        {doorEl && (
+          <g>
+            <rect x={doorX} y={doorY} width={doorW} height={wt} fill="#F5F5DC" stroke="none"/>
+            <path
+              d={`M ${doorX} ${doorY} A ${doorW} ${doorW} 0 0 1 ${doorX + doorW} ${doorY + doorW}`}
+              stroke="#3E2723" strokeWidth="1" strokeDasharray="3 2" fill="none"
+            />
+            <text x={doorX + doorW / 2} y={oy + bldH + 13} textAnchor="middle" fill="#3E2723" fontFamily="monospace" fontSize="7.5" fontWeight="bold">
+              D-1 ({doorWm.toFixed(1)}m)
+            </text>
+          </g>
+        )}
+        {/* ── WINDOW (dashed opening on right wall) ── */}
+        {winEl && (
+          <g>
+            <rect x={winX} y={winY} width={wt} height={winW} fill="#81D4FA" stroke="#0277BD" strokeWidth="1" strokeDasharray="3 2"/>
+            <text x={ox + bldW + 10} y={winY + winW / 2 + 3} fill="#0277BD" fontFamily="monospace" fontSize="7.5" fontWeight="bold">
+              W-1 ({winWm.toFixed(1)}m)
+            </text>
+          </g>
+        )}
+        {/* ── STEEL REBAR DOTS (if steel element present) ── */}
+        {hasSteel && colPositions.map((pos, i) => (
+          <circle key={`rb${i}`} cx={pos.cx} cy={pos.cy} r="2" fill="#D84315"/>
+        ))}
+        {/* ── INTERIOR LABEL ── */}
+        <text x={ox + bldW / 2} y={oy + bldH / 2 - 10} textAnchor="middle" fill="#5D4037" fontFamily="monospace" fontSize="9" fontWeight="bold">
+          STORAGE AREA
         </text>
-        {/* Element blocks */}
-        {elements.map((el, idx) => {
-          const col = idx % COLS;
-          const row = Math.floor(idx / COLS);
-          const x = padX + col * cellW + 3;
-          const y = padY + 20 + row * cellH + 3;
-          const w = cellW - 6;
-          const h = cellH - 6;
-          const theme = catColor[el.category] || catColor['other'];
-          const labelText = el.description.length > 22
-            ? el.description.substring(0, 20) + '…'
-            : el.description;
-          const qtyText = `${el.quantity.value.toFixed(2)} ${el.quantity.unit}`;
-          // Draw size bar proportional to quantity (capped at 90% of cell width)
-          const maxQty = Math.max(...elements.map(e => e.quantity.value), 1);
-          const barW = Math.max(4, Math.min(w - 4, ((el.quantity.value / maxQty) * (w - 8))));
-          return (
-            <g key={el.element_id}>
-              {/* Cell background */}
-              <rect x={x} y={y} width={w} height={h} fill={theme.fill} stroke={theme.stroke} strokeWidth="1.5"/>
-              {/* Category label pill */}
-              <rect x={x + 2} y={y + 2} width={42} height={11} fill={theme.stroke} rx="1"/>
-              <text x={x + 4} y={y + 11} fill="#FFFFFF" fontFamily="monospace" fontSize="7" fontWeight="bold">
-                {theme.label}
-              </text>
-              {/* Confidence dot */}
-              <circle cx={x + w - 6} cy={y + 7} r="4"
-                fill={el.confidence >= 0.8 ? '#388E3C' : el.confidence >= 0.5 ? '#F9A825' : '#D84315'}/>
-              {/* Description text */}
-              <text x={x + 4} y={y + 26} fill="#212121" fontFamily="monospace" fontSize="7.5" fontWeight="bold">
-                {labelText}
-              </text>
-              {/* ID */}
-              <text x={x + 4} y={y + 36} fill="#5D4037" fontFamily="monospace" fontSize="6.5">
-                {el.element_id}
-              </text>
-              {/* Quantity bar */}
-              <rect x={x + 4} y={y + h - 14} width={w - 8} height={6} fill="#E8E4C9" stroke={theme.stroke} strokeWidth="0.5"/>
-              <rect x={x + 4} y={y + h - 14} width={barW} height={6} fill={theme.stroke} opacity="0.7"/>
-              {/* Quantity text */}
-              <text x={x + 4} y={y + h - 2} fill="#3E2723" fontFamily="monospace" fontSize="6.5" fontWeight="bold">
-                {qtyText}
-              </text>
-            </g>
-          );
-        })}
+        <text x={ox + bldW / 2} y={oy + bldH / 2 + 6} textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="8">
+          {interiorL.toFixed(1)}m × {interiorW.toFixed(1)}m = {(interiorL * interiorW).toFixed(1)} m²
+        </text>
+        <text x={ox + bldW / 2} y={oy + bldH / 2 + 18} textAnchor="middle" fill="#9E9E9E" fontFamily="monospace" fontSize="7">
+          {slabEl?.type ?? 'M25'} Slab | Class 1 Brick
+        </text>
+        {/* ── DIMENSION LINES ── */}
+        {/* Width (top) */}
+        <line x1={ox} y1={oy - 18} x2={ox + bldW} y2={oy - 18} stroke="#212121" strokeWidth="1"/>
+        <line x1={ox} y1={oy - 22} x2={ox} y2={oy - 14} stroke="#212121" strokeWidth="1"/>
+        <line x1={ox + bldW} y1={oy - 22} x2={ox + bldW} y2={oy - 14} stroke="#212121" strokeWidth="1"/>
+        <text x={ox + bldW / 2} y={oy - 22} textAnchor="middle" fill="#212121" fontFamily="monospace" fontSize="9" fontWeight="bold">
+          {(rawL * 1000).toFixed(0)}
+        </text>
+        {/* Height (right side) */}
+        <line x1={ox + bldW + 18} y1={oy} x2={ox + bldW + 18} y2={oy + bldH} stroke="#212121" strokeWidth="1"/>
+        <line x1={ox + bldW + 14} y1={oy} x2={ox + bldW + 22} y2={oy} stroke="#212121" strokeWidth="1"/>
+        <line x1={ox + bldW + 14} y1={oy + bldH} x2={ox + bldW + 22} y2={oy + bldH} stroke="#212121" strokeWidth="1"/>
+        <text x={ox + bldW + 28} y={oy + bldH / 2 + 3} textAnchor="start" fill="#212121" fontFamily="monospace" fontSize="9" fontWeight="bold">
+          {(rawW * 1000).toFixed(0)}
+        </text>
+        {/* ── NORTH ARROW ── */}
+        <g transform={`translate(${ox - 30}, ${oy + 20})`}>
+          <polygon points="0,-12 4,4 0,0 -4,4" fill="#3E2723"/>
+          <text x="0" y="20" textAnchor="middle" fill="#3E2723" fontFamily="monospace" fontSize="8" fontWeight="bold">N</text>
+        </g>
+        {/* ── LEGEND ── */}
+        <g transform={`translate(${ox}, ${oy + bldH + 28})`}>
+          <rect x="0" y="0" width="10" height="8" fill="#A1887F" stroke="#3E2723" strokeWidth="0.8"/>
+          <text x="13" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">Brick Wall (230mm)</text>
+          <rect x="80" y="0" width="10" height="8" fill="#9E9E9E" stroke="#3E2723" strokeWidth="0.8"/>
+          <text x="93" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">RCC Column</text>
+          <rect x="155" y="0" width="10" height="8" fill="#81D4FA" stroke="#0277BD" strokeWidth="0.8" strokeDasharray="2 1"/>
+          <text x="168" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">Window</text>
+          {hasSteel && (
+            <>
+              <circle cx="215" cy="4" r="3" fill="#D84315"/>
+              <text x="221" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">Steel Rebar</text>
+            </>
+          )}
+        </g>
+        {/* ── TITLE BLOCK ── */}
+        <rect x={SVG_W - 145} y={SVG_H - 40} width="140" height="38" fill="#E8E4C9" stroke="#3E2723" strokeWidth="1"/>
+        <text x={SVG_W - 75} y={SVG_H - 27} textAnchor="middle" fill="#3E2723" fontFamily="monospace" fontSize="7.5" fontWeight="bold">
+          PLAN VIEW — 1:100
+        </text>
+        <text x={SVG_W - 75} y={SVG_H - 17} textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="6.5">
+          {rawL}m × {rawW}m | {elements.length} elements
+        </text>
+        <text x={SVG_W - 75} y={SVG_H - 7} textAnchor="middle" fill="#616161" fontFamily="monospace" fontSize="6">
+          AutoBOM — IS 456 / IS 1786 / IS 1077
+        </text>
       </svg>
     );
   };
