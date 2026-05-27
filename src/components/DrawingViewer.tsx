@@ -449,7 +449,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
        e.element_id?.toLowerCase().includes('door') ||
        e.element_id?.toLowerCase().includes('d-'))
     );
-    const doorWm = doorEl?.dimensions?.width_m ?? 1.2;
+    const doorWm = doorEl?.dimensions?.width_m || doorEl?.dimensions?.length_m || 1.2;
     const doorW = doorWm * sc;
     // ── Step 6: Detect window ──
     const winEl = elements.find(e =>
@@ -458,7 +458,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
        e.element_id?.toLowerCase().includes('win') ||
        e.element_id?.toLowerCase().includes('w-'))
     );
-    const winWm = winEl?.dimensions?.width_m ?? 1.5;
+    const winWm = winEl?.dimensions?.width_m || winEl?.dimensions?.length_m || 1.5;
     const winW = winWm * sc;
     // ── Step 7: Detect steel elements ──
     const steelEl = elements.find(e => e.category === 'steel');
@@ -512,7 +512,7 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
         <rect x={ox} y={oy + bldH - wt} width={doorX - ox} height={wt} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
         <rect x={doorX + doorW} y={oy + bldH - wt} width={ox + bldW - (doorX + doorW)} height={wt} fill="#A1887F" stroke="#3E2723" strokeWidth="1.5"/>
         {/* ── COLUMNS (4 corners, cross-hatched grey) ── */}
-        {colPositions.map((pos, i) => (
+        {colEls.length > 0 && colPositions.map((pos, i) => (
           <g key={`col${i}`}>
             <rect
               x={pos.cx - colSize / 2} y={pos.cy - colSize / 2}
@@ -585,8 +585,12 @@ export function DrawingViewer({ preset, t, onRunAnalysis, isLoading, uploadedBas
         <g transform={`translate(${ox}, ${oy + bldH + 28})`}>
           <rect x="0" y="0" width="10" height="8" fill="#A1887F" stroke="#3E2723" strokeWidth="0.8"/>
           <text x="13" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">Brick Wall (230mm)</text>
-          <rect x="80" y="0" width="10" height="8" fill="#9E9E9E" stroke="#3E2723" strokeWidth="0.8"/>
-          <text x="93" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">RCC Column</text>
+          {colEls.length > 0 && (
+            <>
+              <rect x="80" y="0" width="10" height="8" fill="#9E9E9E" stroke="#3E2723" strokeWidth="0.8"/>
+              <text x="93" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">RCC Column</text>
+            </>
+          )}
           <rect x="155" y="0" width="10" height="8" fill="#81D4FA" stroke="#0277BD" strokeWidth="0.8" strokeDasharray="2 1"/>
           <text x="168" y="7" fill="#3E2723" fontFamily="monospace" fontSize="7">Window</text>
           {hasSteel && (

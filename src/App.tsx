@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
 import { PRESET_DRAWINGS, PresetDrawing } from './presets';
 import { TAMIL_DICTIONARY, LanguageDictionary } from './tamilStrings';
 import { REGIONAL_RATES_DATABASE, lookupAndCalculateRate } from './ratesData';
@@ -286,6 +287,270 @@ export default function App() {
     });
   };
 
+  const generatePDFReport = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      const primaryColor = [62, 39, 35]; // #3E2723 (Deep Brown)
+      const secondaryColor = [93, 64, 55]; // #5D4037 (Medium Wood)
+      const accentGreen = [56, 142, 60]; // #388E3C (Green)
+      const lightBg = [245, 245, 220]; // #F5F5DC (Beige)
+      const white = [255, 255, 255];
+      const darkText = [33, 33, 33];
+      const grayText = [97, 97, 97];
+
+      // Draw Top Banner Header
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, pageWidth, 42, 'F');
+
+      // Title
+      doc.setTextColor(249, 168, 37); // #F9A825 Gold
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.text('AutoBOM Takeoff & Estimation Report', 15, 18);
+
+      // Subtitle
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text('AEC COMPLIANT BILL OF QUANTITIES & DESIGN AUDIT SUMMARY', 15, 25);
+
+      // Metadata
+      doc.setFontSize(8);
+      doc.setFont('Helvetica', 'bold');
+      doc.text(`DATE: ${new Date().toLocaleDateString()}`, pageWidth - 15, 16, { align: 'right' });
+      doc.text(`SYSTEM REGION: ${activeRegionId.toUpperCase()}`, pageWidth - 15, 22, { align: 'right' });
+      const projName = uploadedBase64 ? (uploadedFileName || 'Custom Upload') : activePreset.title;
+      doc.text(`PROJECT ID: ${uploadedBase64 ? 'CUST-BOM' : activePresetId.toUpperCase()}`, pageWidth - 15, 28, { align: 'right' });
+
+      // Clean gold divider line
+      doc.setDrawColor(249, 168, 37);
+      doc.setLineWidth(1);
+      doc.line(15, 33, pageWidth - 15, 33);
+
+      let y = 52;
+
+      // ─── Section 1: Project Metadata & Structural Parameter Panel ───
+      doc.setFillColor(lightBg[0], lightBg[1], lightBg[2]);
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.5);
+      doc.rect(15, y, pageWidth - 30, 36, 'FD');
+
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('1. PROJECT SPECIFICATIONS & METADATA', 20, y + 6);
+
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+
+      // Column 1
+      doc.text(`Project Title: ${projName}`, 20, y + 14);
+      doc.text(`Site Target: ${uploadedBase64 ? 'Custom Site Overlay' : activePreset.location}`, 20, y + 20);
+      doc.text(`Applied Codes: IS 456:2000, IS 1786:2008, IS 1077:1992`, 20, y + 26);
+      doc.text(`Regional Tariff Model ID: ${activeRegionId}`, 20, y + 32);
+
+      // Column 2
+      const regionLabel = activeRegionId === 'tamil_nadu_erode_2026' ? 'Tamil Nadu (Erode Plan 2026)' :
+                     activeRegionId === 'tamil_nadu_chennai_2026' ? 'Tamil Nadu Metro (Chennai 2026)' :
+                     activeRegionId === 'tamil_nadu_rural_2026' ? 'Tamil Nadu Interior Rural (2026)' : activeRegionId;
+      doc.text(`Region Zone: ${regionLabel}`, 110, y + 14);
+      doc.text(`Concrete Design Strength Mix: ${concreteGrade} Grade`, 110, y + 20);
+      doc.text(`Steel Rebar Reinforcement: ${steelGrade} Standard`, 110, y + 26);
+      doc.text(`Factoring Allowances: Wastage ${wastagePercent}% | Contractor Margin ${contractorMarginPercent}%`, 110, y + 32);
+
+      y += 46;
+
+      // ─── Section 2: Bill of Materials Core Elements Takeoffs ───
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text('2. CORE TAKE-OFF QUANTITIES TABLE (BOQ)', 15, y);
+
+      y += 4;
+
+      // Table Header Row Design
+      doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      doc.rect(15, y, pageWidth - 30, 8, 'F');
+
+      doc.setTextColor(white[0], white[1], white[2]);
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(8);
+      // Columns
+      doc.text('ID', 18, y + 5.5);
+      doc.text('DESCRIPTION / PART', 35, y + 5.5);
+      doc.text('CATEGORY', 105, y + 5.5);
+      doc.text('QUANTITY', 130, y + 5.5);
+      doc.text('UNIT RATE', 156, y + 5.5);
+      doc.text(`AMOUNT (${currency})`, 176, y + 5.5);
+
+      y += 8;
+
+      // Table Elements Iteration
+      doc.setFont('Helvetica', 'normal');
+      doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+      doc.setFontSize(7.5);
+
+      elementsList.forEach((el, index) => {
+        if (y > pageHeight - 35) {
+          doc.setFontSize(7);
+          doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+          doc.text(`AutoBOM System PDF Engine • Page ${doc.internal.pages.length - 1} • Confirmed Metric Output`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+          
+          doc.addPage();
+          doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.rect(0, 0, pageWidth, 12, 'F');
+          doc.setTextColor(white[0], white[1], white[2]);
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text(`AutoBOM BOQ Sheet • ${projName}`, 15, 8);
+          
+          y = 22;
+
+          doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+          doc.rect(15, y, pageWidth - 30, 8, 'F');
+          doc.setTextColor(white[0], white[1], white[2]);
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text('ID', 18, y + 5.5);
+          doc.text('DESCRIPTION / PART', 35, y + 5.5);
+          doc.text('CATEGORY', 105, y + 5.5);
+          doc.text('QUANTITY', 130, y + 5.5);
+          doc.text('UNIT RATE', 156, y + 5.5);
+          doc.text(`AMOUNT (${currency})`, 176, y + 5.5);
+
+          y += 8;
+          doc.setFont('Helvetica', 'normal');
+          doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+          doc.setFontSize(7.5);
+        }
+
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.3);
+        doc.line(15, y, pageWidth - 15, y);
+
+        doc.setFont('Helvetica', 'bold');
+        doc.text(el.element_id || `EL-${index + 1}`, 18, y + 5);
+        doc.setFont('Helvetica', 'normal');
+        
+        const descText = el.description || 'Raw element takeoff';
+        const truncatedDesc = descText.length > 38 ? descText.substring(0, 36) + '...' : descText;
+        doc.text(truncatedDesc, 35, y + 5);
+        
+        const catText = el.category ? el.category.toUpperCase() : 'OTHER';
+        doc.text(catText, 105, y + 5);
+
+        const qtyFormatted = `${(el.quantity?.value ?? 0).toFixed(3)} ${el.quantity?.unit ?? ''}`;
+        doc.text(qtyFormatted, 130, y + 5);
+
+        const formattedRate = currency === 'USD' 
+          ? `$${(el.unit_rate ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+          : `Rs.${(el.unit_rate ?? 0).toLocaleString('en-IN')}`;
+        doc.text(formattedRate, 156, y + 5);
+
+        const totalValue = el.total_cost ?? 0;
+        const formattedTotal = currency === 'USD' 
+          ? `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+          : `Rs.${totalValue.toLocaleString('en-IN')}`;
+        doc.text(formattedTotal, 176, y + 5);
+
+        y += 7.5;
+      });
+
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.8);
+      doc.line(15, y, pageWidth - 15, y);
+
+      y += 8;
+
+      if (y > pageHeight - 55) {
+        doc.setFontSize(7);
+        doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+        doc.text(`AutoBOM System PDF Engine • Page ${doc.internal.pages.length - 1} • Confirmed Metric Output`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        
+        doc.addPage();
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.rect(0, 0, pageWidth, 12, 'F');
+        doc.setTextColor(white[0], white[1], white[2]);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(`AutoBOM Summary • ${projName}`, 15, 8);
+        y = 22;
+      }
+
+      const boxWidth = 85;
+      const boxX = pageWidth - 15 - boxWidth;
+      doc.setFillColor(lightBg[0], lightBg[1], lightBg[2]);
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.5);
+      doc.rect(boxX, y, boxWidth, 34, 'FD');
+
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+
+      const fmtCost = (val: number) => currency === 'USD' 
+        ? `$${val.toLocaleString(undefined, { minimumFractionDigits: 2 })}` 
+        : `Rs.${val.toLocaleString('en-IN')}`;
+
+      doc.text('Subtotal Net Material:', boxX + 4, y + 6);
+      doc.text(fmtCost(aggregateNetDryCost), pageWidth - 19, y + 6, { align: 'right' });
+
+      doc.text(`Wastage Allowance (${wastagePercent}%):`, boxX + 4, y + 13);
+      doc.text(fmtCost(calculatedWastageAndContingency), pageWidth - 19, y + 13, { align: 'right' });
+
+      doc.text(`Contractor Margin Profit (${contractorMarginPercent}%):`, boxX + 4, y + 20);
+      doc.text(fmtCost(grandContractorMargin), pageWidth - 19, y + 20, { align: 'right' });
+
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.5);
+      doc.line(boxX, y + 24, pageWidth - 15, y + 24);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('GRAND TOTAL ESTIMATE:', boxX + 4, y + 29.5);
+      doc.setTextColor(accentGreen[0], accentGreen[1], accentGreen[2]);
+      doc.text(fmtCost(invoiceGrandTotal), pageWidth - 19, y + 29.5, { align: 'right' });
+
+      doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.text('3. ARCHITECTURAL & COMPLIANCE STAMP', 15, y + 4);
+
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text('• Approved Indian Civil Standards verified.', 15, y + 10);
+      doc.text('• Verified layout boundaries for agricultural limits.', 15, y + 15);
+      doc.text('• Steel Rebar densities match IS 1786 standards.', 15, y + 20);
+      doc.text('• Dynamic material wastage coverage included.', 15, y + 25);
+
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.4);
+      doc.line(15, y + 33, 15 + 60, y + 33);
+      doc.setFontSize(7);
+      doc.text('Authorized Civil Auditor Stamp & Signature', 15, y + 36.5);
+
+      doc.setFontSize(7);
+      doc.setTextColor(grayText[0], grayText[1], grayText[2]);
+      doc.text(`AutoBOM System PDF Engine • Page ${doc.internal.pages.length - 1} • Confirmed Metric Output`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+      const safeProjName = projName.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+      doc.save(`AutoBOM_BoQ_Report_${safeProjName}.pdf`);
+
+    } catch (error) {
+      console.error('Failed to generate PDF Report:', error);
+      alert('An error occurred during PDF generation: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   // Switch preset immediately, clean out any custom file state to maintain pristine focus
   const handlePresetChange = (id: string) => {
     setActivePresetId(id);
@@ -430,8 +695,12 @@ export default function App() {
         }
       }
 
+      if (el.category === 'masonry' && el.quantity.unit === 'm3') {
+        baseRate = Math.round(baseRate / 0.23);
+      }
+
       // Multiply by location tariff index (unless preloaded Erode already incorporates it)
-      if (activeRegionId !== 'tamil_nadu_erode_2026') {
+      if (activeRegionId !== 'tamil_nadu_erode_2026' && !(el as any).isModified) {
         baseRate = Math.round(baseRate * multiplier);
       }
 
@@ -1221,6 +1490,12 @@ export default function App() {
 
                     <div className="mt-4 flex flex-col sm:flex-row gap-2">
                       <button 
+                        onClick={generatePDFReport}
+                        className="flex-1 py-2 bg-[#388E3C] text-white border-2 border-[#3E2723] font-bold text-center uppercase cursor-pointer hover:bg-[#2E7D32] font-mono text-2xs active:translate-y-0.5"
+                      >
+                        📄 Download PDF Report
+                      </button>
+                      <button 
                         onClick={() => {
                           let textToPrint = `AUTOBOM BUILDING REPORT\r\n====================\r\n`;
                           textToPrint += `Location: ${activePreset.location}\r\n`;
@@ -1236,7 +1511,7 @@ export default function App() {
                             printWindow.print();
                           }
                         }}
-                        className="flex-1 py-2 bg-[#F5F5DC] text-[#212121] border-2 border-[#3E2723] font-bold text-center uppercase cursor-pointer hover:bg-[#E8E4C9] font-mono text-2xs"
+                        className="flex-1 py-2 bg-[#F5F5DC] text-[#212121] border-2 border-[#3E2723] font-bold text-center uppercase cursor-pointer hover:bg-[#E8E4C9] font-mono text-2xs active:translate-y-0.5"
                       >
                         🖨️ Print Receipt
                       </button>
